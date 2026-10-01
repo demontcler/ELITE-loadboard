@@ -256,10 +256,10 @@ STORAGE_LOCAL_PATH=./storage
 - CompanySettings + compliance requirement seed
 - Identifier generators + storage abstraction + audit helper
 
-### PHASE 2 — Master Data
-- Customers (+ contacts, locations, documents)
-- Carriers (+ contacts, compliance docs)
-- Drivers (+ documents)
+### PHASE 2 — Master Data ✅
+- Customers (+ contacts, locations, job history views)
+- Carriers (+ drivers/equipment summary, compliance doc placeholders)
+- Drivers (+ CDL/medical expiration status)
 - Equipment (tractors/trailers)
 
 ### PHASE 3 — Jobs Core
