@@ -1,0 +1,985 @@
+// ELITE Loadboard — Oilfield / Flatbed Logistics TMS
+// Core invariant: Job → many TruckAssignments → many CargoItems
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Auth & RBAC
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  DISPATCHER
+  ACCOUNTING
+  OPERATIONS_MANAGER
+  VIEW_ONLY
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         Role      @default(VIEW_ONLY)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  auditLogs     AuditLog[]
+  dispatchedJobs Job[]            @relation("JobDispatcher")
+  truckAssignments TruckAssignment[] @relation("AssignmentDispatcher")
+  notifications Notification[]
+
+  @@index([role])
+  @@index([deletedAt])
+}
+
+// ─────────────────────────────────────────────
+// Company Settings
+// ─────────────────────────────────────────────
+
+model CompanySettings {
+  id                        String   @id @default(cuid())
+  companyName               String   @default("ELITE Logistics")
+  jobNumberPrefix           String   @default("JOB")
+  jobNumberFormat           String   @default("{PREFIX}-{YYYY}-{######}")
+  truckNumberPrefix         String   @default("TRK")
+  invoiceNumberPrefix       String   @default("INV")
+  settlementNumberPrefix    String   @default("SET")
+  nextJobSequence           Int      @default(1)
+  nextInvoiceSequence       Int      @default(1)
+  nextSettlementSequence    Int      @default(1)
+  defaultWeightWarningLbs   Decimal  @default(48000) @db.Decimal(12, 2)
+  expiresSoonDays           Int      @default(30)
+  timezone                  String   @default("America/Chicago")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model ComplianceRequirement {
+  id               String   @id @default(cuid())
+  entityType       String // CUSTOMER | CARRIER | DRIVER | EQUIPMENT | TRUCK_ASSIGNMENT
+  documentType     String
+  label            String
+  isRequired       Boolean  @default(true)
+  blocksPayment    Boolean  @default(false)
+  warningDays      Int?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([entityType, isActive])
+}
+
+// ─────────────────────────────────────────────
+// Customers
+// ─────────────────────────────────────────────
+
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  RESTRICTED
+  ARCHIVED
+}
+
+enum PaymentTerms {
+  DUE_ON_RECEIPT
+  NET_15
+  NET_30
+  NET_45
+  NET_60
+  CUSTOM
+}
+
+model Customer {
+  id              String         @id @default(cuid())
+  companyName     String
+  dba             String?
+  billingAddress1 String?
+  billingAddress2 String?
+  billingCity     String?
+  billingState    String?
+  billingZip      String?
+  physicalAddress1 String?
+  physicalAddress2 String?
+  physicalCity    String?
+  physicalState   String?
+  physicalZip     String?
+  mainPhone       String?
+  website         String?
+  status          EntityStatus   @default(ACTIVE)
+  paymentTerms    PaymentTerms   @default(NET_30)
+  creditLimit     Decimal?       @db.Decimal(14, 2)
+  taxId           String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  contacts  CustomerContact[]
+  locations CustomerLocation[]
+  documents CustomerDocument[]
+  jobs      Job[]
+  invoices  Invoice[]
+
+  @@index([companyName])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  customerId String
+  name       String
+  title      String?
+  department String?
+  email      String?
+  phone      String?
+  mobile     String?
+  role       String? // Dispatcher, Billing, AP, Field Contact, etc.
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+}
+
+model CustomerLocation {
+  id              String   @id @default(cuid())
+  customerId      String
+  name            String
+  locationType    String? // Yard, Rig, Lease, Warehouse, Other
+  address1        String?
+  address2        String?
+  city            String?
+  state           String?
+  zip             String?
+  county          String?
+  latitude        Decimal? @db.Decimal(10, 7)
+  longitude       Decimal? @db.Decimal(10, 7)
+  leaseName       String?
+  wellName        String?
+  rigName         String?
+  rigNumber       String?
+  gateInstructions String?
+  directions      String?
+  contactName     String?
+  contactPhone    String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([rigName])
+  @@index([leaseName])
+  @@index([wellName])
+}
+
+model CustomerDocument {
+  id            String    @id @default(cuid())
+  customerId    String
+  documentType  String
+  fileName      String
+  filePath      String
+  mimeType      String
+  fileSizeBytes Int
+  uploadedAt    DateTime  @default(now())
+  effectiveDate DateTime?
+  expirationDate DateTime?
+  status        String    @default("VALID") // VALID | EXPIRES_SOON | EXPIRED | MISSING
+  notes         String?
+  uploadedById  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([expirationDate])
+  @@index([documentType])
+}
+
+// ─────────────────────────────────────────────
+// Carriers
+// ─────────────────────────────────────────────
+
+enum CarrierApprovalStatus {
+  PREFERRED
+  APPROVED
+  PENDING
+  RESTRICTED
+  INACTIVE
+}
+
+model Carrier {
+  id                    String                @id @default(cuid())
+  legalName             String
+  dba                   String?
+  mcNumber              String?
+  usdotNumber           String?
+  taxId                 String?
+  address1              String?
+  address2              String?
+  city                  String?
+  state                 String?
+  zip                   String?
+  phone                 String?
+  email                 String?
+  paymentTerms          PaymentTerms          @default(NET_30)
+  preferredPaymentMethod String?
+  status                EntityStatus          @default(ACTIVE)
+  approvalStatus        CarrierApprovalStatus @default(PENDING)
+  safetyNotes           String?
+  internalNotes         String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?
+
+  contacts    CarrierContact[]
+  documents   CarrierDocument[]
+  drivers     Driver[]
+  tractors    Tractor[]
+  trailers    Trailer[]
+  assignments TruckAssignment[]
+  settlements CarrierSettlement[]
+
+  @@index([legalName])
+  @@index([mcNumber])
+  @@index([usdotNumber])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model CarrierContact {
+  id         String   @id @default(cuid())
+  carrierId  String
+  name       String
+  title      String?
+  email      String?
+  phone      String?
+  mobile     String?
+  role       String? // Primary, Dispatch, Accounting
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  carrier Carrier @relation(fields: [carrierId], references: [id])
+
+  @@index([carrierId])
+}
+
+model CarrierDocument {
+  id             String    @id @default(cuid())
+  carrierId      String
+  documentType   String // COI, Auto Liability, Cargo, GL, WC, W-9, Authority, Agreement, Safety
+  fileName       String
+  filePath       String
+  mimeType       String
+  fileSizeBytes  Int
+  issueDate      DateTime?
+  expirationDate DateTime?
+  status         String    @default("VALID")
+  notes          String?
+  uploadedAt     DateTime  @default(now())
+  uploadedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  carrier Carrier @relation(fields: [carrierId], references: [id])
+
+  @@index([carrierId])
+  @@index([expirationDate])
+  @@index([documentType])
+}
+
+// ─────────────────────────────────────────────
+// Drivers
+// ─────────────────────────────────────────────
+
+enum DriverType {
+  COMPANY
+  OWNER_OPERATOR
+  CARRIER
+  CONTRACTOR
+}
+
+enum DriverStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_TRANSIT
+  OFF_DUTY
+  INACTIVE
+  OUT_OF_SERVICE
+}
+
+model Driver {
+  id                    String       @id @default(cuid())
+  firstName             String
+  lastName              String
+  phone                 String?
+  email                 String?
+  carrierId             String?
+  driverType            DriverType   @default(CARRIER)
+  cdlNumber             String?
+  cdlState              String?
+  cdlClass              String?
+  cdlExpiration         DateTime?
+  medicalCardExpiration DateTime?
+  twicNumber            String?
+  twicExpiration        DateTime?
+  status                DriverStatus @default(AVAILABLE)
+  assignedTractorId     String?
+  assignedTrailerId     String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  notes                 String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  deletedAt             DateTime?
+
+  carrier     Carrier?  @relation(fields: [carrierId], references: [id])
+  documents   DriverDocument[]
+  assignments TruckAssignment[]
+
+  @@index([lastName, firstName])
+  @@index([carrierId])
+  @@index([phone])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model DriverDocument {
+  id             String    @id @default(cuid())
+  driverId       String
+  documentType   String // CDL, Medical Card, TWIC, Training, Safety, Other
+  fileName       String
+  filePath       String
+  mimeType       String
+  fileSizeBytes  Int
+  issueDate      DateTime?
+  expirationDate DateTime?
+  status         String    @default("VALID")
+  notes          String?
+  uploadedAt     DateTime  @default(now())
+  uploadedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  driver Driver @relation(fields: [driverId], references: [id])
+
+  @@index([driverId])
+  @@index([expirationDate])
+}
+
+// ─────────────────────────────────────────────
+// Equipment
+// ─────────────────────────────────────────────
+
+enum EquipmentStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_TRANSIT
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum TrailerType {
+  FLATBED
+  STEP_DECK
+  DOUBLE_DROP
+  RGN
+  HOTSHOT
+  PIPE_TRAILER
+  OTHER
+}
+
+model Tractor {
+  id            String          @id @default(cuid())
+  unitNumber    String
+  vin           String?
+  licensePlate  String?
+  licenseState  String?
+  year          Int?
+  make          String?
+  model         String?
+  carrierId     String?
+  status        EquipmentStatus @default(AVAILABLE)
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+
+  carrier     Carrier? @relation(fields: [carrierId], references: [id])
+  documents   EquipmentDocument[] @relation("TractorDocuments")
+  assignments TruckAssignment[]
+
+  @@unique([carrierId, unitNumber])
+  @@index([unitNumber])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Trailer {
+  id              String          @id @default(cuid())
+  unitNumber      String
+  vin             String?
+  licensePlate    String?
+  licenseState    String?
+  trailerType     TrailerType     @default(FLATBED)
+  customType      String?
+  lengthFeet      Decimal?        @db.Decimal(6, 2)
+  axles           Int?
+  maxPayloadLbs   Decimal?        @db.Decimal(12, 2)
+  carrierId       String?
+  status          EquipmentStatus @default(AVAILABLE)
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  carrier     Carrier? @relation(fields: [carrierId], references: [id])
+  documents   EquipmentDocument[] @relation("TrailerDocuments")
+  assignments TruckAssignment[]
+
+  @@unique([carrierId, unitNumber])
+  @@index([unitNumber])
+  @@index([trailerType])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model EquipmentDocument {
+  id             String    @id @default(cuid())
+  tractorId      String?
+  trailerId      String?
+  documentType   String
+  fileName       String
+  filePath       String
+  mimeType       String
+  fileSizeBytes  Int
+  issueDate      DateTime?
+  expirationDate DateTime?
+  status         String    @default("VALID")
+  notes          String?
+  uploadedAt     DateTime  @default(now())
+  uploadedById   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tractor Tractor? @relation("TractorDocuments", fields: [tractorId], references: [id])
+  trailer Trailer? @relation("TrailerDocuments", fields: [trailerId], references: [id])
+
+  @@index([tractorId])
+  @@index([trailerId])
+  @@index([expirationDate])
+}
+
+// ─────────────────────────────────────────────
+// Jobs & Truck Assignments & Cargo
+// ─────────────────────────────────────────────
+
+enum JobType {
+  OILFIELD
+  PIPE
+  FLATBED
+  EQUIPMENT
+  RIG_MATERIALS
+  MULTI_TRUCK_PROJECT
+  OTHER
+}
+
+enum BillingMethod {
+  PER_LOAD
+  PER_TRUCK
+  PER_MILE
+  PER_HOUR
+  FLAT_RATE
+  PER_FOOT
+  OTHER
+}
+
+enum JobStatus {
+  DRAFT
+  SCHEDULED
+  NEEDS_TRUCKS
+  PARTIALLY_ASSIGNED
+  READY
+  DISPATCHED
+  PARTIALLY_DISPATCHED
+  IN_TRANSIT
+  PARTIALLY_DELIVERED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum TruckAssignmentStatus {
+  UNASSIGNED
+  ASSIGNED
+  CONFIRMED
+  DISPATCHED
+  ARRIVED_PICKUP
+  LOADING
+  LOADED
+  IN_TRANSIT
+  ARRIVED_DELIVERY
+  UNLOADING
+  DELIVERED
+  POD_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum MaterialCategory {
+  CASING
+  TUBING
+  DRILL_PIPE
+  PRODUCTION_EQUIPMENT
+  RIG_EQUIPMENT
+  VALVES
+  SPOOLS
+  SKIDS
+  TANKS
+  PUMPS
+  GENERATORS
+  OILFIELD_TOOLS
+  FLATBED_FREIGHT
+  MISCELLANEOUS
+  CUSTOM
+}
+
+model Job {
+  id                    String        @id @default(cuid())
+  jobNumber             String        @unique
+  customerId            String
+  customerPoNumber      String?
+  customerReferenceNumber String?
+  orderNumber           String?
+  requestedBy           String?
+  customerContactId     String?
+  customerContactName   String?
+  customerContactPhone  String?
+  jobType               JobType       @default(OILFIELD)
+  status                JobStatus     @default(DRAFT)
+  pickupDate            DateTime?
+  pickupTime            String?
+  deliveryDate          DateTime?
+  deliveryTime          String?
+
+  // Pickup location (oilfield-aware)
+  pickupName            String?
+  pickupAddress1        String?
+  pickupAddress2        String?
+  pickupCity            String?
+  pickupState           String?
+  pickupZip             String?
+  pickupCounty          String?
+  pickupLatitude        Decimal?      @db.Decimal(10, 7)
+  pickupLongitude       Decimal?      @db.Decimal(10, 7)
+  pickupDirections      String?
+  pickupGateInstructions String?
+  pickupContactName     String?
+  pickupContactPhone    String?
+
+  // Delivery location
+  deliveryName          String?
+  deliveryAddress1      String?
+  deliveryAddress2      String?
+  deliveryCity          String?
+  deliveryState         String?
+  deliveryZip           String?
+  deliveryCounty        String?
+  deliveryLatitude      Decimal?      @db.Decimal(10, 7)
+  deliveryLongitude     Decimal?      @db.Decimal(10, 7)
+  deliveryDirections    String?
+  deliveryGateInstructions String?
+  deliveryContactName   String?
+  deliveryContactPhone  String?
+
+  // Oilfield specifics
+  rigName               String?
+  rigNumber             String?
+  leaseName             String?
+  wellName              String?
+  afeNumber             String?
+  fieldContactName      String?
+  fieldContactPhone     String?
+
+  specialInstructions   String?
+  trucksRequired        Int           @default(1)
+  equipmentRequirements String?
+  customerRate          Decimal?      @db.Decimal(14, 2)
+  billingMethod         BillingMethod @default(PER_TRUCK)
+  notes                 String?
+
+  // Aggregated financials (cached; recalculated on change)
+  totalRevenue          Decimal       @default(0) @db.Decimal(14, 2)
+  totalCost             Decimal       @default(0) @db.Decimal(14, 2)
+  totalAdditionalCost   Decimal       @default(0) @db.Decimal(14, 2)
+  grossProfit           Decimal       @default(0) @db.Decimal(14, 2)
+  marginPercent         Decimal       @default(0) @db.Decimal(7, 4)
+
+  dispatcherId          String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+
+  customer     Customer          @relation(fields: [customerId], references: [id])
+  dispatcher   User?             @relation("JobDispatcher", fields: [dispatcherId], references: [id])
+  trucks       TruckAssignment[]
+  documents    JobDocument[]
+  invoices     Invoice[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([pickupDate])
+  @@index([deliveryDate])
+  @@index([rigName])
+  @@index([leaseName])
+  @@index([wellName])
+  @@index([dispatcherId])
+  @@index([deletedAt])
+  @@index([jobNumber])
+}
+
+model TruckAssignment {
+  id                 String                @id @default(cuid())
+  jobId              String
+  assignmentNumber   Int // 1, 2, 3... within job
+  displayId          String // TRK-001 style within job context
+  carrierId          String?
+  driverId           String?
+  driverPhone        String?
+  tractorId          String?
+  trailerId          String?
+  trailerType        TrailerType?
+  equipmentType      String?
+  pickupDate         DateTime?
+  pickupTime         String?
+  deliveryDate       DateTime?
+  deliveryTime       String?
+  status             TruckAssignmentStatus @default(UNASSIGNED)
+  carrierRate        Decimal?              @db.Decimal(14, 2)
+  driverRate         Decimal?              @db.Decimal(14, 2)
+  accessorialTotal   Decimal               @default(0) @db.Decimal(14, 2)
+  totalCost          Decimal               @default(0) @db.Decimal(14, 2)
+  revenueAllocation  Decimal?              @db.Decimal(14, 2)
+  additionalCost     Decimal               @default(0) @db.Decimal(14, 2)
+  profit             Decimal               @default(0) @db.Decimal(14, 2)
+  marginPercent      Decimal               @default(0) @db.Decimal(7, 4)
+  totalFootage       Decimal               @default(0) @db.Decimal(14, 3)
+  totalWeightLbs     Decimal               @default(0) @db.Decimal(14, 2)
+  weightWarning      Boolean               @default(false)
+  dispatcherId       String?
+  notes              String?
+  dispatchedAt       DateTime?
+  deliveredAt        DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  deletedAt          DateTime?
+
+  job         Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  carrier     Carrier?         @relation(fields: [carrierId], references: [id])
+  driver      Driver?          @relation(fields: [driverId], references: [id])
+  tractor     Tractor?         @relation(fields: [tractorId], references: [id])
+  trailer     Trailer?         @relation(fields: [trailerId], references: [id])
+  dispatcher  User?            @relation("AssignmentDispatcher", fields: [dispatcherId], references: [id])
+  cargoItems  CargoItem[]
+  documents   TruckAssignmentDocument[]
+  accessorials Accessorial[]
+  settlements CarrierSettlement[]
+
+  @@unique([jobId, assignmentNumber])
+  @@index([jobId])
+  @@index([carrierId])
+  @@index([driverId])
+  @@index([status])
+  @@index([pickupDate])
+  @@index([deletedAt])
+}
+
+model CargoItem {
+  id                      String           @id @default(cuid())
+  truckAssignmentId       String
+  sortOrder               Int              @default(0)
+  materialCategory        MaterialCategory @default(CUSTOM)
+  materialDescription     String
+  pipeType                String?
+  pipeGrade               String?
+  pipeOutsideDiameterIn   Decimal?         @db.Decimal(8, 4)
+  wallThicknessIn         Decimal?         @db.Decimal(8, 4)
+  jointLengthFt           Decimal?         @db.Decimal(10, 3)
+  numberOfJoints          Int?
+  totalFootage            Decimal?         @db.Decimal(14, 3)
+  weightPerFoot           Decimal?         @db.Decimal(10, 4)
+  calculatedWeightLbs     Decimal?         @db.Decimal(14, 2)
+  manualWeightOverrideLbs Decimal?         @db.Decimal(14, 2)
+  heatNumber              String?
+  bundleCount             Int?
+  quantity                Decimal?         @db.Decimal(14, 3)
+  unit                    String?
+  customerMaterialRef     String?
+  notes                   String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  deletedAt               DateTime?
+
+  truckAssignment TruckAssignment @relation(fields: [truckAssignmentId], references: [id], onDelete: Cascade)
+
+  @@index([truckAssignmentId])
+  @@index([materialCategory])
+  @@index([materialDescription])
+}
+
+// ─────────────────────────────────────────────
+// Documents
+// ─────────────────────────────────────────────
+
+model JobDocument {
+  id            String   @id @default(cuid())
+  jobId         String
+  documentType  String // Rate Confirmation, Customer PO, Load Sheet, Invoice, Photos, Other
+  fileName      String
+  filePath      String
+  mimeType      String
+  fileSizeBytes Int
+  notes         String?
+  uploadedAt    DateTime @default(now())
+  uploadedById  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([documentType])
+}
+
+model TruckAssignmentDocument {
+  id                String   @id @default(cuid())
+  truckAssignmentId String
+  documentType      String // BOL, POD, Rate Confirmation, Scale Ticket, Pipe Tally, Carrier Invoice, Photos, Other
+  fileName          String
+  filePath          String
+  mimeType          String
+  fileSizeBytes     Int
+  notes             String?
+  uploadedAt        DateTime @default(now())
+  uploadedById      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  truckAssignment TruckAssignment @relation(fields: [truckAssignmentId], references: [id], onDelete: Cascade)
+
+  @@index([truckAssignmentId])
+  @@index([documentType])
+}
+
+// ─────────────────────────────────────────────
+// Accounting
+// ─────────────────────────────────────────────
+
+enum InvoiceStatus {
+  DRAFT
+  READY_TO_INVOICE
+  SENT
+  PARTIAL_PAYMENT
+  PAID
+  OVERDUE
+  DISPUTED
+  VOID
+}
+
+enum SettlementStatus {
+  DRAFT
+  DOCUMENTS_PENDING
+  READY_FOR_PAYMENT
+  APPROVED
+  PAID
+  ON_HOLD
+  VOID
+}
+
+enum AccessorialType {
+  DETENTION
+  LAYOVER
+  TONU
+  FUEL_SURCHARGE
+  LUMPER
+  EXTRA_STOP
+  PERMIT
+  ESCORT
+  OTHER
+}
+
+model Accessorial {
+  id                String         @id @default(cuid())
+  truckAssignmentId String
+  type              AccessorialType
+  description       String?
+  amount            Decimal        @db.Decimal(14, 2)
+  billToCustomer    Boolean        @default(true)
+  payToCarrier      Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  truckAssignment TruckAssignment @relation(fields: [truckAssignmentId], references: [id], onDelete: Cascade)
+
+  @@index([truckAssignmentId])
+}
+
+model Invoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique
+  customerId      String
+  jobId           String?
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime?
+  invoiceAmount   Decimal       @db.Decimal(14, 2)
+  amountPaid      Decimal       @default(0) @db.Decimal(14, 2)
+  remainingBalance Decimal      @db.Decimal(14, 2)
+  status          InvoiceStatus @default(DRAFT)
+  notes           String?
+  sentAt          DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  customer  Customer          @relation(fields: [customerId], references: [id])
+  job       Job?              @relation(fields: [jobId], references: [id])
+  lineItems InvoiceLineItem[]
+
+  @@index([customerId])
+  @@index([jobId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([invoiceNumber])
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal  @default(1) @db.Decimal(14, 3)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  amount      Decimal  @db.Decimal(14, 2)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model CarrierSettlement {
+  id                String           @id @default(cuid())
+  settlementNumber  String           @unique
+  carrierId         String
+  driverId          String?
+  jobId             String?
+  truckAssignmentId String?
+  amount            Decimal          @db.Decimal(14, 2)
+  documentsComplete Boolean          @default(false)
+  paymentApproved   Boolean          @default(false)
+  paymentDate       DateTime?
+  paymentMethod     String?
+  holdReason        String?
+  status            SettlementStatus @default(DRAFT)
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  deletedAt         DateTime?
+
+  carrier         Carrier              @relation(fields: [carrierId], references: [id])
+  truckAssignment TruckAssignment?     @relation(fields: [truckAssignmentId], references: [id])
+  lineItems       SettlementLineItem[]
+
+  @@index([carrierId])
+  @@index([truckAssignmentId])
+  @@index([status])
+  @@index([settlementNumber])
+}
+
+model SettlementLineItem {
+  id           String   @id @default(cuid())
+  settlementId String
+  description  String
+  amount       Decimal  @db.Decimal(14, 2)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  settlement CarrierSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@index([settlementId])
+}
+
+// ─────────────────────────────────────────────
+// Audit & Notifications
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String
+  previousValue Json?
+  newValue    Json?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String    @default("INFO") // INFO | WARNING | ALERT | COMPLIANCE | ACCOUNTING
+  linkUrl   String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
