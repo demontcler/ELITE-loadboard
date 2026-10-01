@@ -12,6 +12,8 @@ import { DedicatedEntityForm } from "@/components/forms/dedicated-entity-form";
 import { Can } from "@/components/auth/can";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArchiveButton } from "@/components/shared/archive-button";
+import { DocumentsPanel } from "@/components/documents/documents-panel";
+import { CARRIER_DOC_TYPES } from "@/lib/documents/types";
 
 export default async function CarrierDetailPage({
   params,
@@ -320,6 +322,14 @@ export default async function CarrierDetailPage({
           </div>
         </div>
       </section>
+
+      <DocumentsPanel
+        ownerType="CARRIER"
+        ownerId={carrier.id}
+        documents={carrier.documents}
+        documentTypes={[...CARRIER_DOC_TYPES]}
+        title="Compliance Documents"
+      />
     </div>
   );
 }

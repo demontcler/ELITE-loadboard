@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTrailer, updateTrailer, softDeleteTrailer } from "@/server/equipment";
 import { listCarriers } from "@/server/carriers";
-import { PageHeader, StatusBadge, EmptyState, DataTable } from "@/components/shared/page-chrome";
+import { PageHeader, StatusBadge } from "@/components/shared/page-chrome";
 import { DedicatedEntityForm } from "@/components/forms/dedicated-entity-form";
 import { Can } from "@/components/auth/can";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArchiveButton } from "@/components/shared/archive-button";
+import { DocumentsPanel } from "@/components/documents/documents-panel";
+import { EQUIPMENT_DOC_TYPES } from "@/lib/documents/types";
 
 export default async function TrailerDetailPage({
   params,
@@ -171,22 +173,13 @@ export default async function TrailerDetailPage({
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Documents</h2>
-        {trailer.documents.length === 0 ? (
-          <EmptyState message="Equipment documents will be managed in the Documents phase." />
-        ) : (
-          <DataTable headers={["Type", "File", "Expires"]}>
-            {trailer.documents.map((doc) => (
-              <tr key={doc.id}>
-                <td className="px-3 py-2">{doc.documentType}</td>
-                <td className="px-3 py-2">{doc.fileName}</td>
-                <td className="px-3 py-2">
-                  {doc.expirationDate ? doc.expirationDate.toISOString().slice(0, 10) : "—"}
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
+        <DocumentsPanel
+          ownerType="TRAILER"
+          ownerId={trailer.id}
+          documents={trailer.documents}
+          documentTypes={[...EQUIPMENT_DOC_TYPES]}
+          title="Equipment Documents"
+        />
       </section>
     </div>
   );

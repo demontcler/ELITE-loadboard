@@ -67,6 +67,8 @@ model CompanySettings {
   weightUnit                String   @default("lb")
   distanceUnit              String   @default("mi")
   expiresSoonDays           Int      @default(30)
+  /// WARNING_ONLY | BLOCK_DISPATCH | ADMIN_OVERRIDE
+  dispatchComplianceMode    String   @default("WARNING_ONLY")
   timezone                  String   @default("America/Chicago")
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
@@ -74,16 +76,19 @@ model CompanySettings {
 
 model ComplianceRequirement {
   id               String   @id @default(cuid())
-  entityType       String // CUSTOMER | CARRIER | DRIVER | EQUIPMENT | TRUCK_ASSIGNMENT
+  entityType       String // CUSTOMER | CARRIER | DRIVER | EQUIPMENT | TRUCK_ASSIGNMENT | TRACTOR | TRAILER
   documentType     String
   label            String
   isRequired       Boolean  @default(true)
   blocksPayment    Boolean  @default(false)
+  blocksInvoice    Boolean  @default(false)
+  expirationRequired Boolean @default(false)
   warningDays      Int?
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  @@unique([entityType, documentType])
   @@index([entityType, isActive])
 }
 
@@ -199,28 +204,34 @@ model CustomerLocation {
 }
 
 model CustomerDocument {
-  id            String    @id @default(cuid())
-  customerId    String
-  documentType  String
-  fileName      String
-  filePath      String
-  mimeType      String
-  fileSizeBytes Int
-  uploadedAt    DateTime  @default(now())
-  effectiveDate DateTime?
-  expirationDate DateTime?
-  status        String    @default("VALID") // VALID | EXPIRES_SOON | EXPIRED | MISSING
-  notes         String?
-  uploadedById  String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
+  id              String    @id @default(cuid())
+  customerId      String
+  documentType    String
+  referenceNumber String?
+  fileName        String
+  filePath        String // storage key
+  storageProvider String    @default("local")
+  mimeType        String
+  fileSizeBytes   Int
+  uploadedAt      DateTime  @default(now())
+  effectiveDate   DateTime?
+  expirationDate  DateTime?
+  isCurrent       Boolean   @default(true)
+  status          String    @default("VALID") // VALID | EXPIRES_SOON | EXPIRED | MISSING | ARCHIVED
+  notes           String?
+  uploadedById    String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   customer Customer @relation(fields: [customerId], references: [id])
 
   @@index([customerId])
   @@index([expirationDate])
   @@index([documentType])
+  @@index([isCurrent])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────
@@ -294,28 +305,35 @@ model CarrierContact {
 }
 
 model CarrierDocument {
-  id             String    @id @default(cuid())
-  carrierId      String
-  documentType   String // COI, Auto Liability, Cargo, GL, WC, W-9, Authority, Agreement, Safety
-  fileName       String
-  filePath       String
-  mimeType       String
-  fileSizeBytes  Int
-  issueDate      DateTime?
-  expirationDate DateTime?
-  status         String    @default("VALID")
-  notes          String?
-  uploadedAt     DateTime  @default(now())
-  uploadedById   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
+  id              String    @id @default(cuid())
+  carrierId       String
+  documentType    String // COI, Auto Liability, Cargo, GL, WC, W-9, Authority, Agreement, Safety
+  referenceNumber String?
+  fileName        String
+  filePath        String
+  storageProvider String    @default("local")
+  mimeType        String
+  fileSizeBytes   Int
+  issueDate       DateTime?
+  effectiveDate   DateTime?
+  expirationDate  DateTime?
+  isCurrent       Boolean   @default(true)
+  status          String    @default("VALID")
+  notes           String?
+  uploadedAt      DateTime  @default(now())
+  uploadedById    String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   carrier Carrier @relation(fields: [carrierId], references: [id])
 
   @@index([carrierId])
   @@index([expirationDate])
   @@index([documentType])
+  @@index([isCurrent])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────
@@ -375,27 +393,35 @@ model Driver {
 }
 
 model DriverDocument {
-  id             String    @id @default(cuid())
-  driverId       String
-  documentType   String // CDL, Medical Card, TWIC, Training, Safety, Other
-  fileName       String
-  filePath       String
-  mimeType       String
-  fileSizeBytes  Int
-  issueDate      DateTime?
-  expirationDate DateTime?
-  status         String    @default("VALID")
-  notes          String?
-  uploadedAt     DateTime  @default(now())
-  uploadedById   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
+  id              String    @id @default(cuid())
+  driverId        String
+  documentType    String // CDL, Medical Card, TWIC, Training, Safety, Other
+  referenceNumber String?
+  fileName        String
+  filePath        String
+  storageProvider String    @default("local")
+  mimeType        String
+  fileSizeBytes   Int
+  issueDate       DateTime?
+  effectiveDate   DateTime?
+  expirationDate  DateTime?
+  isCurrent       Boolean   @default(true)
+  status          String    @default("VALID")
+  notes           String?
+  uploadedAt      DateTime  @default(now())
+  uploadedById    String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   driver Driver @relation(fields: [driverId], references: [id])
 
   @@index([driverId])
   @@index([expirationDate])
+  @@index([documentType])
+  @@index([isCurrent])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────
@@ -476,23 +502,28 @@ model Trailer {
 }
 
 model EquipmentDocument {
-  id             String    @id @default(cuid())
-  tractorId      String?
-  trailerId      String?
-  documentType   String
-  fileName       String
-  filePath       String
-  mimeType       String
-  fileSizeBytes  Int
-  issueDate      DateTime?
-  expirationDate DateTime?
-  status         String    @default("VALID")
-  notes          String?
-  uploadedAt     DateTime  @default(now())
-  uploadedById   String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
+  id              String    @id @default(cuid())
+  tractorId       String?
+  trailerId       String?
+  documentType    String
+  referenceNumber String?
+  fileName        String
+  filePath        String
+  storageProvider String    @default("local")
+  mimeType        String
+  fileSizeBytes   Int
+  issueDate       DateTime?
+  effectiveDate   DateTime?
+  expirationDate  DateTime?
+  isCurrent       Boolean   @default(true)
+  status          String    @default("VALID")
+  notes           String?
+  uploadedAt      DateTime  @default(now())
+  uploadedById    String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   tractor Tractor? @relation("TractorDocuments", fields: [tractorId], references: [id])
   trailer Trailer? @relation("TrailerDocuments", fields: [trailerId], references: [id])
@@ -500,6 +531,9 @@ model EquipmentDocument {
   @@index([tractorId])
   @@index([trailerId])
   @@index([expirationDate])
+  @@index([documentType])
+  @@index([isCurrent])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────
@@ -766,45 +800,62 @@ model CargoItem {
 // ─────────────────────────────────────────────
 
 model JobDocument {
-  id            String   @id @default(cuid())
-  jobId         String
-  documentType  String // Rate Confirmation, Customer PO, Load Sheet, Invoice, Photos, Other
-  fileName      String
-  filePath      String
-  mimeType      String
-  fileSizeBytes Int
-  notes         String?
-  uploadedAt    DateTime @default(now())
-  uploadedById  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  deletedAt     DateTime?
+  id              String    @id @default(cuid())
+  jobId           String
+  documentType    String // Rate Confirmation, Customer PO, Load Sheet, Invoice, Photos, Other
+  referenceNumber String?
+  fileName        String
+  filePath        String
+  storageProvider String    @default("local")
+  mimeType        String
+  fileSizeBytes   Int
+  effectiveDate   DateTime?
+  expirationDate  DateTime?
+  isCurrent       Boolean   @default(true)
+  status          String    @default("VALID")
+  notes           String?
+  uploadedAt      DateTime  @default(now())
+  uploadedById    String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
 
   job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId])
   @@index([documentType])
+  @@index([isCurrent])
 }
 
 model TruckAssignmentDocument {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   truckAssignmentId String
   documentType      String // BOL, POD, Rate Confirmation, Scale Ticket, Pipe Tally, Carrier Invoice, Photos, Other
+  referenceNumber   String?
   fileName          String
   filePath          String
+  storageProvider   String    @default("local")
   mimeType          String
   fileSizeBytes     Int
+  effectiveDate     DateTime?
+  expirationDate    DateTime?
+  isCurrent         Boolean   @default(true)
+  status            String    @default("VALID")
   notes             String?
-  uploadedAt        DateTime @default(now())
+  uploadedAt        DateTime  @default(now())
   uploadedById      String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
 
   truckAssignment TruckAssignment @relation(fields: [truckAssignmentId], references: [id], onDelete: Cascade)
 
   @@index([truckAssignmentId])
   @@index([documentType])
+  @@index([isCurrent])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────

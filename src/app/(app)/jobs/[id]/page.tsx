@@ -14,16 +14,21 @@ import {
 import { listCarriers } from "@/server/carriers";
 import { listDrivers } from "@/server/drivers";
 import { listTractors, listTrailers } from "@/server/equipment";
+import { getJobPaperwork, archiveDocument } from "@/server/documents";
 import { PageHeader, StatusBadge, EmptyState, DataTable } from "@/components/shared/page-chrome";
 import { DedicatedEntityForm } from "@/components/forms/dedicated-entity-form";
 import { AssignTruckForm } from "@/components/jobs/assign-truck-form";
 import { BulkTruckActions } from "@/components/jobs/bulk-truck-actions";
+import { DocumentUploadForm } from "@/components/documents/document-upload-form";
+import { DispatchComplianceWarnings } from "@/components/jobs/dispatch-compliance-warnings";
 import { Can } from "@/components/auth/can";
 import { ArchiveButton } from "@/components/shared/archive-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatWeight, formatFootage, formatPercent } from "@/lib/utils";
 import { summarizeTruckProgress, type TruckStatusLike } from "@/lib/calculations/job-status";
+import { OPERATIONAL_DOC_TYPES } from "@/lib/documents/types";
+import { getSecureDocumentUrl } from "@/lib/storage";
 
 export default async function JobDetailPage({
   params,
@@ -31,14 +36,19 @@ export default async function JobDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [job, carriers, drivers, tractors, trailers] = await Promise.all([
+  const [job, carriers, drivers, tractors, trailers, paperwork] = await Promise.all([
     getJob(id),
     listCarriers(),
     listDrivers(),
     listTractors(),
     listTrailers(),
+    getJobPaperwork(id).catch(() => null),
   ]);
   if (!job) notFound();
+
+  const paperworkByTruck = new Map(
+    (paperwork?.trucks ?? []).map((t) => [t.truckAssignmentId, t])
+  );
 
   const progress = summarizeTruckProgress(
     job.trucksRequired,
@@ -121,7 +131,7 @@ export default async function JobDetailPage({
         }
       />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <Card>
           <CardHeader>
             <CardTitle className="text-xs uppercase text-slate-500">Schedule</CardTitle>
@@ -176,6 +186,35 @@ export default async function JobDetailPage({
             <div className="text-slate-500">
               Cost {formatCurrency(job.totalCost.toString())} · {formatPercent(job.marginPercent.toString())}
             </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xs uppercase text-slate-500">Paperwork</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm tabular-nums">
+            {paperwork ? (
+              <>
+                <div>
+                  {paperwork.job.bolsReceived}/{paperwork.job.trucksTotal} BOLs
+                </div>
+                <div>
+                  {paperwork.job.podsReceived}/{paperwork.job.trucksTotal} PODs
+                </div>
+                <div>
+                  {paperwork.job.paperworkComplete}/{paperwork.job.trucksTotal} complete
+                </div>
+                {paperwork.job.trucksMissingPod > 0 ? (
+                  <div className="mt-1 font-semibold text-amber-700">
+                    {paperwork.job.trucksMissingPod} missing POD
+                  </div>
+                ) : (
+                  <div className="mt-1 font-semibold text-emerald-700">Paperwork complete</div>
+                )}
+              </>
+            ) : (
+              <div className="text-slate-500">—</div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -245,14 +284,16 @@ export default async function JobDetailPage({
                   <th className="px-3 py-2">Carrier</th>
                   <th className="px-3 py-2">Tractor</th>
                   <th className="px-3 py-2">Trailer</th>
-                  <th className="px-3 py-2">Cargo</th>
-                  <th className="px-3 py-2">Footage</th>
+                  <th className="px-3 py-2">BOL</th>
+                  <th className="px-3 py-2">POD</th>
+                  <th className="px-3 py-2">Paperwork</th>
                   <th className="px-3 py-2">Weight</th>
                   <th className="px-3 py-2">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {job.trucks.map((truck) => {
+                  const pw = paperworkByTruck.get(truck.id);
                   const tractorLabel = truck.tractor
                     ? [truck.tractor.unitNumber, truck.tractor.make, truck.tractor.model]
                         .filter(Boolean)
@@ -268,10 +309,6 @@ export default async function JobDetailPage({
                         .filter(Boolean)
                         .join(" / ")
                     : truck.trailerType?.replaceAll("_", " ") ?? null;
-                  const cargoSummary = truck.cargoItems
-                    .map((c) => c.materialDescription)
-                    .slice(0, 2)
-                    .join(", ");
                   const flags: { label: string; variant: "danger" | "warning" | "default" | "info" | "success" }[] =
                     [];
                   if (truck.status === "UNASSIGNED")
@@ -286,13 +323,14 @@ export default async function JobDetailPage({
                     flags.push({ label: "NEEDS EQUIPMENT", variant: "warning" });
                   if (truck.weightWarning)
                     flags.push({ label: "OVER WEIGHT THRESHOLD", variant: "warning" });
+                  if (pw && !pw.pod) flags.push({ label: "MISSING POD", variant: "danger" });
 
                   return (
                     <tr key={truck.id} className="border-t border-slate-100 align-top">
-                      <td className="px-3 py-3" colSpan={9}>
+                      <td className="px-3 py-3" colSpan={10}>
                         <details className="group">
                           <summary className="cursor-pointer list-none">
-                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-9 lg:items-start">
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-10 lg:items-start">
                               <div>
                                 <div className="font-semibold text-slate-900">{truck.displayId}</div>
                                 <div className="mt-1 flex flex-wrap gap-1">
@@ -311,9 +349,12 @@ export default async function JobDetailPage({
                               <div className="text-slate-700">{truck.carrier?.legalName ?? "—"}</div>
                               <div className="text-slate-700">{tractorLabel ?? "—"}</div>
                               <div className="text-slate-700">{trailerLabel ?? "—"}</div>
-                              <div className="truncate text-slate-600">{cargoSummary || "—"}</div>
-                              <div className="tabular-nums">
-                                {formatFootage(truck.totalFootage.toString())}
+                              <div className="font-semibold">{pw?.bol ? "✓" : "✕"}</div>
+                              <div className="font-semibold">{pw?.pod ? "✓" : "✕"}</div>
+                              <div>
+                                <Badge variant={pw?.complete ? "success" : "warning"}>
+                                  {pw?.statusLabel ?? "—"}
+                                </Badge>
                               </div>
                               <div className="tabular-nums">
                                 {formatWeight(truck.totalWeightLbs.toString())}
@@ -325,6 +366,12 @@ export default async function JobDetailPage({
                           </summary>
 
                           <div className="mt-3 space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                            <DispatchComplianceWarnings
+                              carrierId={truck.carrierId}
+                              driverId={truck.driverId}
+                              tractorId={truck.tractorId}
+                              trailerId={truck.trailerId}
+                            />
                             <Can permission="jobs:write">
                               <div className="flex flex-wrap gap-2">
                                 <AssignTruckForm
@@ -382,6 +429,63 @@ export default async function JobDetailPage({
                                 </form>
                               </div>
                             </Can>
+
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  Documents (truck-specific)
+                                </h3>
+                                <Can permission="documents:write">
+                                  <DocumentUploadForm
+                                    ownerType="TRUCK_ASSIGNMENT"
+                                    ownerId={truck.id}
+                                    documentTypes={[...OPERATIONAL_DOC_TYPES]}
+                                    title={`Upload BOL/POD — ${truck.displayId}`}
+                                    defaultDocumentType="POD"
+                                  />
+                                </Can>
+                              </div>
+                              {truck.documents.length === 0 ? (
+                                <EmptyState message="No BOL/POD/photos for this truck yet." />
+                              ) : (
+                                <DataTable headers={["Type", "File", "Ref", "Uploaded", ""]}>
+                                  {truck.documents.map((doc) => (
+                                    <tr key={doc.id}>
+                                      <td className="px-3 py-2 font-medium">{doc.documentType}</td>
+                                      <td className="px-3 py-2">
+                                        <Link
+                                          href={getSecureDocumentUrl({
+                                            ownerType: "TRUCK_ASSIGNMENT",
+                                            documentId: doc.id,
+                                          })}
+                                          className="text-sky-700 hover:underline"
+                                          target="_blank"
+                                        >
+                                          {doc.fileName}
+                                        </Link>
+                                      </td>
+                                      <td className="px-3 py-2">{doc.referenceNumber ?? "—"}</td>
+                                      <td className="px-3 py-2">
+                                        {doc.uploadedAt.toISOString().slice(0, 10)}
+                                      </td>
+                                      <td className="px-3 py-2 text-right">
+                                        <Can permission="documents:write">
+                                          {doc.isCurrent ? (
+                                            <ArchiveButton
+                                              label="Archive"
+                                              action={async () => {
+                                                "use server";
+                                                await archiveDocument("TRUCK_ASSIGNMENT", doc.id);
+                                              }}
+                                            />
+                                          ) : null}
+                                        </Can>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </DataTable>
+                              )}
+                            </div>
 
                             <div>
                               <div className="mb-2 flex items-center justify-between">

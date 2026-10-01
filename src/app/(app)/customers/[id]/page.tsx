@@ -15,6 +15,8 @@ import { Can } from "@/components/auth/can";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { ArchiveButton } from "@/components/shared/archive-button";
+import { DocumentsPanel } from "@/components/documents/documents-panel";
+import { CUSTOMER_DOC_TYPES } from "@/lib/documents/types";
 
 export default async function CustomerDetailPage({
   params,
@@ -334,6 +336,14 @@ export default async function CustomerDetailPage({
           </DataTable>
         )}
       </section>
+
+      <DocumentsPanel
+        ownerType="CUSTOMER"
+        ownerId={customer.id}
+        documents={customer.documents}
+        documentTypes={[...CUSTOMER_DOC_TYPES]}
+        title="Documents / Compliance"
+      />
     </div>
   );
 }

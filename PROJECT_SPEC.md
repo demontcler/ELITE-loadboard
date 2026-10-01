@@ -298,13 +298,18 @@ STORAGE_LOCAL_PATH=./storage
 | 3 Jobs core | **COMPLETE** | Multi-truck independence, equipment selection, bulk actions, revenue rule |
 | 4 Load board | **COMPLETE** | Columns + operational filters + accurate truck counts |
 
-Do **not** begin Phase 5 until explicitly approved.
+Do **not** begin Phase 5 until explicitly approved. *(Superseded — Phase 5 implemented below.)*
 
-### PHASE 5 — Documents & Compliance
-- Upload/download via storage abstraction
-- Per-entity documents
-- Expiration warnings
-- Paperwork checklist / payment holds
+### PHASE 5 — Documents & Compliance ✅ COMPLETE
+- Per-entity documents (Job, TruckAssignment, Customer, Carrier, Driver, Tractor, Trailer)
+- Storage abstraction (local now; S3-ready keys); secure download via `/api/documents/...`
+- Truck BOL/POD paperwork independence + Job paperwork aggregation
+- Configurable ComplianceRequirement (BOL/POD required; payment/invoice holds)
+- Expiration engine (VALID / EXPIRES_SOON / EXPIRED / MISSING)
+- Compliance Center with filters; dispatch WARNING_ONLY compliance alerts
+- Document replace archives prior current (history preserved)
+- Mobile-friendly upload (file + camera capture)
+- Integration: `npm run test:phase5`
 
 ### PHASE 6 — Accounting
 - Job & truck profitability
@@ -315,7 +320,7 @@ Do **not** begin Phase 5 until explicitly approved.
 
 ### PHASE 7 — Dashboard, Search, Reports
 - Executive metrics with deep links (basic dashboard live; full reports later)
-- Global search (foundation live in Phase 1 remediation; BOL/POD/invoice IDs later)
+- Global search (foundation live; BOL/POD/invoice IDs later)
 - Basic operational reports
 
 ### PHASE 8 — Polish
@@ -336,9 +341,9 @@ Do **not** begin Phase 5 until explicitly approved.
 | `lib/calculations/financial.ts` | Revenue, cost, margin, % |
 | `lib/calculations/job-status.ts` | Aggregate parent status from trucks |
 | `lib/calculations/compliance.ts` | Document valid / expires soon / expired / missing |
-| `lib/calculations/paperwork.ts` | Checklist completeness → payment hold |
+| `lib/calculations/paperwork.ts` | Checklist completeness → payment/invoice hold |
 
-Integration harness: `npm run test:integration` (`scripts/integration-phases-1-4.ts`).
+Integration harnesses: `npm run test:integration`, `npm run test:phase5`.
 
 ---
 

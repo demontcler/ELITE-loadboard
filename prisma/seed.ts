@@ -86,17 +86,11 @@ async function main() {
   const paperworkDefaults = [
     {
       entityType: "TRUCK_ASSIGNMENT",
-      documentType: "RATE_CONFIRMATION",
-      label: "Rate Confirmation",
-      isRequired: true,
-      blocksPayment: false,
-    },
-    {
-      entityType: "TRUCK_ASSIGNMENT",
       documentType: "BOL",
       label: "BOL",
       isRequired: true,
       blocksPayment: false,
+      blocksInvoice: false,
     },
     {
       entityType: "TRUCK_ASSIGNMENT",
@@ -104,20 +98,31 @@ async function main() {
       label: "POD",
       isRequired: true,
       blocksPayment: true,
+      blocksInvoice: true,
     },
     {
       entityType: "TRUCK_ASSIGNMENT",
       documentType: "CARRIER_INVOICE",
       label: "Carrier Invoice",
-      isRequired: true,
+      isRequired: false,
       blocksPayment: true,
+      blocksInvoice: false,
+    },
+    {
+      entityType: "CARRIER",
+      documentType: "CERTIFICATE_OF_INSURANCE",
+      label: "Certificate of Insurance",
+      isRequired: true,
+      blocksPayment: false,
+      expirationRequired: true,
     },
     {
       entityType: "CARRIER",
       documentType: "COI",
-      label: "Certificate of Insurance",
-      isRequired: true,
+      label: "COI",
+      isRequired: false,
       blocksPayment: false,
+      expirationRequired: true,
     },
     {
       entityType: "CARRIER",
@@ -125,6 +130,22 @@ async function main() {
       label: "W-9",
       isRequired: true,
       blocksPayment: true,
+    },
+    {
+      entityType: "DRIVER",
+      documentType: "CDL",
+      label: "CDL",
+      isRequired: true,
+      blocksPayment: false,
+      expirationRequired: true,
+    },
+    {
+      entityType: "DRIVER",
+      documentType: "MEDICAL_CARD",
+      label: "Medical Card",
+      isRequired: true,
+      blocksPayment: false,
+      expirationRequired: true,
     },
   ];
 
@@ -137,8 +158,26 @@ async function main() {
     });
     if (!existing) {
       await prisma.complianceRequirement.create({ data: req });
+    } else {
+      await prisma.complianceRequirement.update({
+        where: { id: existing.id },
+        data: {
+          isRequired: req.isRequired,
+          blocksPayment: req.blocksPayment,
+          blocksInvoice: "blocksInvoice" in req ? Boolean(req.blocksInvoice) : false,
+          expirationRequired: "expirationRequired" in req ? Boolean(req.expirationRequired) : false,
+          label: req.label,
+          isActive: true,
+        },
+      });
     }
   }
+
+  // Deactivate legacy RATE_CONFIRMATION as required truck paperwork
+  await prisma.complianceRequirement.updateMany({
+    where: { entityType: "TRUCK_ASSIGNMENT", documentType: "RATE_CONFIRMATION" },
+    data: { isRequired: false, isActive: false },
+  });
 
   // Demo oilfield dataset (idempotent — only when no customers exist)
   const customerCount = await prisma.customer.count({ where: { deletedAt: null } });

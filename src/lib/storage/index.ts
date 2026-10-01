@@ -1,34 +1,25 @@
 import { randomUUID } from "crypto";
 import { mkdir, writeFile, readFile, unlink } from "fs/promises";
 import path from "path";
+import {
+  ALLOWED_UPLOAD_MIME,
+  MAX_UPLOAD_BYTES,
+} from "@/lib/documents/types";
 
 export type StoredFile = {
   fileName: string;
-  filePath: string;
+  filePath: string; // storage key relative to provider root
   mimeType: string;
   fileSizeBytes: number;
+  storageProvider: string;
 };
 
-const ALLOWED_MIME_TYPES = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]);
-
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
-
 export function validateUpload(mimeType: string, sizeBytes: number): void {
-  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-    throw new Error(`Unsupported file type: ${mimeType}`);
+  if (!ALLOWED_UPLOAD_MIME.has(mimeType)) {
+    throw new Error("Unsupported file type. Allowed: PDF, JPG, JPEG, PNG.");
   }
-  if (sizeBytes <= 0 || sizeBytes > MAX_FILE_SIZE_BYTES) {
-    throw new Error(`File size must be between 1 byte and ${MAX_FILE_SIZE_BYTES} bytes`);
+  if (sizeBytes <= 0 || sizeBytes > MAX_UPLOAD_BYTES) {
+    throw new Error(`File size must be between 1 byte and ${MAX_UPLOAD_BYTES / (1024 * 1024)} MB`);
   }
 }
 
@@ -36,8 +27,13 @@ function localRoot(): string {
   return process.env.STORAGE_LOCAL_PATH || "./storage";
 }
 
+export function getStorageProvider(): string {
+  return process.env.STORAGE_PROVIDER || "local";
+}
+
 /**
  * Storage abstraction — local filesystem now, S3/R2-compatible later.
+ * filePath returned is the opaque storage key (never a public URL).
  */
 export async function storeFile(params: {
   buffer: Buffer;
@@ -47,7 +43,7 @@ export async function storeFile(params: {
 }): Promise<StoredFile> {
   validateUpload(params.mimeType, params.buffer.byteLength);
 
-  const provider = process.env.STORAGE_PROVIDER || "local";
+  const provider = getStorageProvider();
   if (provider !== "local") {
     throw new Error(`Storage provider "${provider}" is not configured yet. Use local.`);
   }
@@ -68,19 +64,33 @@ export async function storeFile(params: {
     filePath: path.join(params.folder, storedName),
     mimeType: params.mimeType,
     fileSizeBytes: params.buffer.byteLength,
+    storageProvider: provider,
   };
 }
 
 export async function readStoredFile(filePath: string): Promise<Buffer> {
+  // Prevent path traversal — keys are relative storage paths only
+  if (filePath.includes("..") || path.isAbsolute(filePath)) {
+    throw new Error("Invalid storage key");
+  }
   const fullPath = path.join(localRoot(), filePath);
   return readFile(fullPath);
 }
 
 export async function deleteStoredFile(filePath: string): Promise<void> {
+  if (filePath.includes("..") || path.isAbsolute(filePath)) return;
   const fullPath = path.join(localRoot(), filePath);
   try {
     await unlink(fullPath);
   } catch {
     // ignore missing files
   }
+}
+
+/** Opaque download path — never a direct public URL to storage. */
+export function getSecureDocumentUrl(params: {
+  ownerType: string;
+  documentId: string;
+}): string {
+  return `/api/documents/${params.ownerType}/${params.documentId}`;
 }

@@ -7,6 +7,8 @@ import { DedicatedEntityForm } from "@/components/forms/dedicated-entity-form";
 import { Can } from "@/components/auth/can";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArchiveButton } from "@/components/shared/archive-button";
+import { DocumentsPanel } from "@/components/documents/documents-panel";
+import { DRIVER_DOC_TYPES } from "@/lib/documents/types";
 import { evaluateDocumentStatus } from "@/lib/calculations/compliance";
 
 export default async function DriverDetailPage({
@@ -237,27 +239,13 @@ export default async function DriverDetailPage({
         )}
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Documents</h2>
-        {driver.documents.length === 0 ? (
-          <EmptyState message="CDL, medical card, TWIC, and training uploads available in Documents phase." />
-        ) : (
-          <DataTable headers={["Type", "File", "Status", "Expires"]}>
-            {driver.documents.map((doc) => (
-              <tr key={doc.id}>
-                <td className="px-3 py-2">{doc.documentType}</td>
-                <td className="px-3 py-2">{doc.fileName}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge status={doc.status} />
-                </td>
-                <td className="px-3 py-2">
-                  {doc.expirationDate ? doc.expirationDate.toISOString().slice(0, 10) : "—"}
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
-      </section>
+      <DocumentsPanel
+        ownerType="DRIVER"
+        ownerId={driver.id}
+        documents={driver.documents}
+        documentTypes={[...DRIVER_DOC_TYPES]}
+        title="Driver Compliance Documents"
+      />
     </div>
   );
 }
