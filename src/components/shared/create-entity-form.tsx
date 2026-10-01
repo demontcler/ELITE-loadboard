@@ -22,15 +22,17 @@ export function CreateEntityForm({
   onSubmit,
   submitLabel = "Create",
   defaultValues,
+  defaultOpen = false,
 }: {
   title: string;
   fields: Field[];
   onSubmit: (data: Record<string, string>) => Promise<unknown>;
   submitLabel?: string;
   defaultValues?: Record<string, string>;
+  defaultOpen?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [values, setValues] = useState<Record<string, string>>(defaultValues ?? {});
