@@ -13,10 +13,38 @@ import { PageHeader, StatusBadge, EmptyState, DataTable } from "@/components/sha
 import { DedicatedEntityForm } from "@/components/forms/dedicated-entity-form";
 import { Can } from "@/components/auth/can";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatCurrencyPrecise, formatWeight, formatFootage } from "@/lib/utils";
 import { ArchiveButton } from "@/components/shared/archive-button";
 import { DocumentsPanel } from "@/components/documents/documents-panel";
 import { CUSTOMER_DOC_TYPES } from "@/lib/documents/types";
+import { getCustomerReporting } from "@/server/reports";
+
+async function CustomerReportCards({ customerId }: { customerId: string }) {
+  const report = await getCustomerReporting(customerId, { preset: "year" }).catch(() => null);
+  if (!report) return null;
+  const cards = [
+    { label: "Jobs (YTD)", value: String(report.totalJobs) },
+    { label: "Truck Movements", value: String(report.totalTruckMovements) },
+    { label: "Revenue", value: formatCurrencyPrecise(report.revenue.toString()) },
+    { label: "Outstanding AR", value: formatCurrencyPrecise(report.outstandingAr.toString()) },
+    { label: "Avg $/Job", value: formatCurrencyPrecise(report.averageRevenuePerJob.toString()) },
+    { label: "Active / Completed", value: `${report.activeJobs} / ${report.completedJobs}` },
+    { label: "Weight Hauled", value: formatWeight(report.materialWeight.toString()) },
+    { label: "Footage Hauled", value: formatFootage(report.materialFootage.toString()) },
+  ];
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {cards.map((c) => (
+        <Card key={c.label}>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] uppercase text-slate-500">{c.label}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm font-semibold tabular-nums">{c.value}</CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 export default async function CustomerDetailPage({
   params,
@@ -305,6 +333,11 @@ export default async function CustomerDetailPage({
             ))}
           </DataTable>
         )}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold">Reporting snapshot</h2>
+        <CustomerReportCards customerId={customer.id} />
       </section>
 
       <section className="space-y-2">

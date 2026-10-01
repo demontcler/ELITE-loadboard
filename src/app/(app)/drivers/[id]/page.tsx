@@ -10,6 +10,70 @@ import { ArchiveButton } from "@/components/shared/archive-button";
 import { DocumentsPanel } from "@/components/documents/documents-panel";
 import { DRIVER_DOC_TYPES } from "@/lib/documents/types";
 import { evaluateDocumentStatus } from "@/lib/calculations/compliance";
+import { getDriverReporting } from "@/server/reports";
+
+async function DriverReportCards({ driverId }: { driverId: string }) {
+  const report = await getDriverReporting(driverId).catch(() => null);
+  if (!report) return null;
+  return (
+    <div className="space-y-2">
+      <h2 className="text-sm font-semibold">Reporting snapshot</h2>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] uppercase text-slate-500">Assignments</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm font-semibold">{report.truckAssignments}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] uppercase text-slate-500">Completed</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm font-semibold">{report.loadsCompleted}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] uppercase text-slate-500">Current</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm font-semibold">
+            {report.currentAssignment ? (
+              <Link
+                href={`/jobs/${report.currentAssignment.jobId}`}
+                className="text-blue-700 hover:underline"
+              >
+                {report.currentAssignment.jobNumber} / {report.currentAssignment.displayId}
+              </Link>
+            ) : (
+              "—"
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-[10px] uppercase text-slate-500">Equipment</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm font-semibold">
+            {report.currentAssignment
+              ? [report.currentAssignment.tractor, report.currentAssignment.trailer]
+                  .filter(Boolean)
+                  .join(" / ") || "—"
+              : "—"}
+          </CardContent>
+        </Card>
+      </div>
+      {report.documents.length > 0 ? (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {report.documents.map((d, i) => (
+            <span key={`${d.documentType}-${i}`} className="rounded border px-2 py-1">
+              {d.documentType}: {d.status}
+              {d.expirationDate ? ` · exp ${d.expirationDate.toISOString().slice(0, 10)}` : ""}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default async function DriverDetailPage({
   params,
@@ -238,6 +302,8 @@ export default async function DriverDetailPage({
           </DataTable>
         )}
       </section>
+
+      <DriverReportCards driverId={driver.id} />
 
       <DocumentsPanel
         ownerType="DRIVER"

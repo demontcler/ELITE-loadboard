@@ -167,6 +167,8 @@ model CustomerContact {
   customer Customer @relation(fields: [customerId], references: [id])
 
   @@index([customerId])
+  @@index([name])
+  @@index([phone])
 }
 
 model CustomerLocation {
@@ -232,6 +234,8 @@ model CustomerDocument {
   @@index([documentType])
   @@index([isCurrent])
   @@index([status])
+  @@index([referenceNumber])
+  @@index([fileName])
 }
 
 // ─────────────────────────────────────────────
@@ -705,6 +709,8 @@ model Job {
   @@index([dispatcherId])
   @@index([deletedAt])
   @@index([jobNumber])
+  @@index([customerPoNumber])
+  @@index([customerReferenceNumber])
 }
 
 model TruckAssignment {
@@ -828,6 +834,8 @@ model JobDocument {
   @@index([jobId])
   @@index([documentType])
   @@index([isCurrent])
+  @@index([referenceNumber])
+  @@index([fileName])
 }
 
 model TruckAssignmentDocument {
@@ -858,6 +866,8 @@ model TruckAssignmentDocument {
   @@index([documentType])
   @@index([isCurrent])
   @@index([status])
+  @@index([referenceNumber])
+  @@index([fileName])
 }
 
 // ─────────────────────────────────────────────

@@ -299,6 +299,7 @@ STORAGE_LOCAL_PATH=./storage
 | 4 Load board | **COMPLETE** | Columns + operational filters + accurate truck counts |
 | 5 Documents | **COMPLETE** | Per-truck BOL/POD independence, compliance center, secure storage, holds |
 | 6 Accounting | **COMPLETE** | AR/AP, paperwork holds, settlements, profitability, accessorials |
+| 7 Dashboard / Reports / Search | **COMPLETE** | Live metrics, ops/financial reports, CSV export, expanded search |
 
 Do **not** begin Phase 8 until explicitly approved.
 
@@ -324,10 +325,16 @@ Do **not** begin Phase 8 until explicitly approved.
 - Audit logs for invoice/payment/payable/settlement/accessorial actions
 - Integration: `npm run test:phase6`
 
-### PHASE 7 — Dashboard, Search, Reports
-- Executive metrics with deep links (basic dashboard live; full reports later)
-- Global search (foundation live; BOL/POD/invoice IDs later)
-- Basic operational reports
+### PHASE 7 — Dashboard, Search, Reports ✅ COMPLETE
+- Executive/ops dashboard with clickable live metrics (ops + accounting when permitted)
+- Operations reports: jobs by customer/status, truck movements, loads by carrier, material/pipe/weight, missing trucks
+- Financial reports (accounting:read): revenue/profit by customer/month, AR aging, accessorials
+- Customer / Carrier / Driver profile reporting snapshots
+- Date presets (today → year + custom) using company timezone from Settings
+- Global search: jobs, PO/refs, contacts, carriers (MC/USDOT), drivers, equipment, BOL/POD refs, invoices, settlements, filenames
+- Debounced client search; server-side queries with indexes; CSV export with RBAC
+- Saved-filter preparation links (My Loads Today, Missing PODs, Invoices Ready, etc.)
+- Integration: `npm run test:phase7`
 
 ### PHASE 8 — Polish
 - Lint / typecheck / tests
@@ -348,8 +355,9 @@ Do **not** begin Phase 8 until explicitly approved.
 | `lib/calculations/job-status.ts` | Aggregate parent status from trucks |
 | `lib/calculations/compliance.ts` | Document valid / expires soon / expired / missing |
 | `lib/calculations/paperwork.ts` | Checklist completeness → payment/invoice hold |
+| `lib/dates/ranges.ts` | Company-timezone date presets for reports/dashboard |
 
-Integration harnesses: `npm run test:integration`, `npm run test:phase5`, `npm run test:phase6`.
+Integration harnesses: `npm run test:integration`, `npm run test:phase5`, `npm run test:phase6`, `npm run test:phase7`.
 
 ---
 
@@ -364,6 +372,7 @@ Dispatchers can:
 5. Track BOL/POD per truck *(Phase 5)*
 6. See job profitability and AR/AP status *(Phase 6)*
 7. Get compliance and paperwork alerts *(Phase 5)*
+8. Operate from a live dashboard with reports and global search *(Phase 7)*
 
 ---
 

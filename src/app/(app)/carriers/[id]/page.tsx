@@ -14,6 +14,49 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArchiveButton } from "@/components/shared/archive-button";
 import { DocumentsPanel } from "@/components/documents/documents-panel";
 import { CARRIER_DOC_TYPES } from "@/lib/documents/types";
+import { getCarrierReporting } from "@/server/reports";
+import { formatCurrencyPrecise } from "@/lib/utils";
+
+async function CarrierReportCards({ carrierId }: { carrierId: string }) {
+  const report = await getCarrierReporting(carrierId, { preset: "year" }).catch(() => null);
+  if (!report) return null;
+  const cards = [
+    { label: "Truck Assignments", value: String(report.truckAssignments) },
+    { label: "Loads Completed", value: String(report.loadsCompleted) },
+    { label: "Total Carrier Cost", value: formatCurrencyPrecise(report.totalCarrierCost.toString()) },
+    { label: "Outstanding AP", value: formatCurrencyPrecise(report.outstandingPayables.toString()) },
+    { label: "Paid", value: formatCurrencyPrecise(report.paidAmount.toString()) },
+    {
+      label: "Avg Cost / Movement",
+      value: formatCurrencyPrecise(report.averageCostPerMovement.toString()),
+    },
+  ];
+  return (
+    <div className="space-y-2">
+      <h2 className="text-sm font-semibold">Reporting snapshot</h2>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {cards.map((c) => (
+          <Card key={c.label}>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-[10px] uppercase text-slate-500">{c.label}</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm font-semibold tabular-nums">{c.value}</CardContent>
+          </Card>
+        ))}
+      </div>
+      {report.complianceDocs.length > 0 ? (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {report.complianceDocs.map((d, i) => (
+            <span key={`${d.documentType}-${i}`} className="rounded border px-2 py-1">
+              {d.documentType}: {d.status}
+              {d.expirationDate ? ` · exp ${d.expirationDate.toISOString().slice(0, 10)}` : ""}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default async function CarrierDetailPage({
   params,
@@ -322,6 +365,8 @@ export default async function CarrierDetailPage({
           </div>
         </div>
       </section>
+
+      <CarrierReportCards carrierId={carrier.id} />
 
       <DocumentsPanel
         ownerType="CARRIER"
