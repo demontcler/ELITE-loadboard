@@ -8,32 +8,100 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { prisma } from "@/lib/db";
+import { requireSession } from "@/lib/auth/session";
+import { summarizeTruckProgress, type TruckStatusLike } from "@/lib/calculations/job-status";
 
-const METRICS = [
-  { label: "Today's Jobs", value: "—", href: "/load-board?column=today", icon: ClipboardList },
-  { label: "Active Trucks", value: "—", href: "/load-board?column=dispatched", icon: Truck },
-  { label: "Trucks Needed", value: "—", href: "/load-board?filter=needs-trucks", icon: AlertTriangle },
-  { label: "Missing PODs", value: "—", href: "/documents?filter=missing-pod", icon: FileWarning },
-  { label: "Revenue (Week)", value: "—", href: "/accounting", icon: DollarSign },
-  { label: "Gross Margin", value: "—", href: "/accounting", icon: TrendingUp },
-];
+export default async function DashboardPage() {
+  await requireSession();
 
-export default function DashboardPage() {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const [todayJobs, activeJobs, settings] = await Promise.all([
+    prisma.job.findMany({
+      where: {
+        deletedAt: null,
+        pickupDate: { gte: startOfDay, lte: endOfDay },
+        status: { notIn: ["CANCELLED", "DRAFT"] },
+      },
+      include: { trucks: { where: { deletedAt: null }, select: { status: true } } },
+      take: 200,
+    }),
+    prisma.job.findMany({
+      where: {
+        deletedAt: null,
+        status: { notIn: ["CANCELLED", "COMPLETED", "DRAFT"] },
+      },
+      include: { trucks: { where: { deletedAt: null }, select: { status: true } } },
+      take: 300,
+    }),
+    prisma.companySettings.findFirst(),
+  ]);
+
+  let trucksNeeded = 0;
+  let activeTrucks = 0;
+  for (const job of activeJobs) {
+    const progress = summarizeTruckProgress(
+      job.trucksRequired,
+      job.trucks.map((t) => t.status as TruckStatusLike)
+    );
+    trucksNeeded += progress.needed;
+    activeTrucks += progress.dispatched;
+  }
+
+  const metrics = [
+    {
+      label: "Today's Jobs",
+      value: String(todayJobs.length),
+      href: "/load-board",
+      icon: ClipboardList,
+    },
+    {
+      label: "Active Trucks",
+      value: String(activeTrucks),
+      href: "/load-board",
+      icon: Truck,
+    },
+    {
+      label: "Trucks Needed",
+      value: String(trucksNeeded),
+      href: "/load-board?needsTrucks=1",
+      icon: AlertTriangle,
+    },
+    {
+      label: "Missing PODs",
+      value: "—",
+      href: "/documents",
+      icon: FileWarning,
+    },
+    {
+      label: "Revenue (Open Jobs)",
+      value: "—",
+      href: "/accounting",
+      icon: DollarSign,
+    },
+    {
+      label: "Gross Margin",
+      value: "—",
+      href: "/accounting",
+      icon: TrendingUp,
+    },
+  ];
+
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Operations Dashboard</h1>
-          <p className="text-sm text-slate-500">
-            Oilfield · pipe · flatbed dispatch overview. Metrics populate as jobs are created.
-          </p>
-        </div>
-        <Badge variant="info">Phase 1</Badge>
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900">Operations Dashboard</h1>
+        <p className="text-sm text-slate-500">
+          {settings?.companyName ?? "ELITE Logistics"} — oilfield · pipe · flatbed dispatch overview.
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {METRICS.map((m) => {
+        {metrics.map((m) => {
           const Icon = m.icon;
           return (
             <Link key={m.label} href={m.href}>
@@ -57,17 +125,19 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>System ready</CardTitle>
+          <CardTitle>Dispatcher focus</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-slate-600">
-          <p>
-            Foundation is in place: authentication, RBAC, PostgreSQL schema, calculation
-            utilities, and the operations shell.
-          </p>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Core model: Customer → Job → Truck Assignments → Cargo Items</li>
-            <li>Each truck is an independent assignment with its own cargo, docs, and costs</li>
-            <li>Next: Phase 2 master data (Customers, Carriers, Drivers, Equipment)</li>
+            <li>
+              Use the <Link className="font-medium text-sky-700 hover:underline" href="/load-board">Load Board</Link> for Future / Today / Dispatched work.
+            </li>
+            <li>
+              Open a job to manage independent truck assignments, cargo, and equipment.
+            </li>
+            <li>
+              Search globally from the header for jobs, POs, carriers, drivers, and equipment.
+            </li>
           </ul>
         </CardContent>
       </Card>

@@ -5,14 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireUserPermission } from "@/lib/auth/session";
 import { writeAuditLog } from "@/server/audit";
 import { driverSchema } from "@/lib/validators/master-data";
-
-function emptyToNull<T extends Record<string, unknown>>(obj: T): T {
-  const out = { ...obj };
-  for (const key of Object.keys(out)) {
-    if (out[key] === "") (out as Record<string, unknown>)[key] = null;
-  }
-  return out;
-}
+import { ActionError, emptyToNull, parseWithFieldErrors } from "@/lib/validators/form";
 
 function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null;
@@ -20,11 +13,12 @@ function parseDate(value: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export async function listDrivers(query?: string) {
+export async function listDrivers(query?: string, carrierId?: string) {
   await requireUserPermission("drivers:read");
   return prisma.driver.findMany({
     where: {
       deletedAt: null,
+      ...(carrierId ? { carrierId } : {}),
       ...(query
         ? {
             OR: [
@@ -51,36 +45,50 @@ export async function getDriver(id: string) {
     include: {
       carrier: true,
       documents: { where: { deletedAt: null }, orderBy: { uploadedAt: "desc" } },
+      assignments: {
+        where: { deletedAt: null },
+        orderBy: { updatedAt: "desc" },
+        take: 15,
+        select: {
+          id: true,
+          displayId: true,
+          status: true,
+          pickupDate: true,
+          job: { select: { id: true, jobNumber: true } },
+        },
+      },
     },
   });
 }
 
+function toDriverData(data: ReturnType<typeof driverSchema.parse>) {
+  return {
+    firstName: data.firstName,
+    lastName: data.lastName,
+    phone: data.phone,
+    email: data.email === "" ? null : data.email,
+    carrierId: data.carrierId || null,
+    driverType: data.driverType,
+    cdlNumber: data.cdlNumber,
+    cdlState: data.cdlState,
+    cdlClass: data.cdlClass,
+    cdlExpiration: parseDate(data.cdlExpiration),
+    medicalCardExpiration: parseDate(data.medicalCardExpiration),
+    twicNumber: data.twicNumber,
+    twicExpiration: parseDate(data.twicExpiration),
+    status: data.status,
+    emergencyContactName: data.emergencyContactName,
+    emergencyContactPhone: data.emergencyContactPhone,
+    notes: data.notes,
+  };
+}
+
 export async function createDriver(raw: unknown) {
   const session = await requireUserPermission("drivers:write");
-  const data = emptyToNull(driverSchema.parse(raw));
-  const email = data.email === "" ? null : data.email;
+  const parsed = parseWithFieldErrors(driverSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
 
-  const driver = await prisma.driver.create({
-    data: {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      phone: data.phone,
-      email,
-      carrierId: data.carrierId || null,
-      driverType: data.driverType,
-      cdlNumber: data.cdlNumber,
-      cdlState: data.cdlState,
-      cdlClass: data.cdlClass,
-      cdlExpiration: parseDate(data.cdlExpiration),
-      medicalCardExpiration: parseDate(data.medicalCardExpiration),
-      twicNumber: data.twicNumber,
-      twicExpiration: parseDate(data.twicExpiration),
-      status: data.status,
-      emergencyContactName: data.emergencyContactName,
-      emergencyContactPhone: data.emergencyContactPhone,
-      notes: data.notes,
-    },
-  });
+  const driver = await prisma.driver.create({ data: toDriverData(parsed.data) });
 
   await writeAuditLog({
     userId: session.user.id,
@@ -96,33 +104,15 @@ export async function createDriver(raw: unknown) {
 
 export async function updateDriver(id: string, raw: unknown) {
   const session = await requireUserPermission("drivers:write");
-  const data = emptyToNull(driverSchema.parse(raw));
-  const email = data.email === "" ? null : data.email;
+  const parsed = parseWithFieldErrors(driverSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
 
   const previous = await prisma.driver.findFirst({ where: { id, deletedAt: null } });
-  if (!previous) throw new Error("Driver not found");
+  if (!previous) throw new ActionError("Driver not found");
 
   const driver = await prisma.driver.update({
     where: { id },
-    data: {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      phone: data.phone,
-      email,
-      carrierId: data.carrierId || null,
-      driverType: data.driverType,
-      cdlNumber: data.cdlNumber,
-      cdlState: data.cdlState,
-      cdlClass: data.cdlClass,
-      cdlExpiration: parseDate(data.cdlExpiration),
-      medicalCardExpiration: parseDate(data.medicalCardExpiration),
-      twicNumber: data.twicNumber,
-      twicExpiration: parseDate(data.twicExpiration),
-      status: data.status,
-      emergencyContactName: data.emergencyContactName,
-      emergencyContactPhone: data.emergencyContactPhone,
-      notes: data.notes,
-    },
+    data: toDriverData(parsed.data),
   });
 
   await writeAuditLog({

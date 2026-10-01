@@ -217,19 +217,23 @@ async function browserJobCreation() {
       "route context missing"
     );
 
-    // Add cargo to truck 1 via UI
-    // Click first "Add Cargo" button
+    // Expand first truck row and open cargo form
+    await page.evaluate(() => {
+      const details = document.querySelector("details");
+      if (details) details.open = true;
+    });
     const addCargoButtons = await page.$$("button");
     let clicked = false;
     for (const btn of addCargoButtons) {
       const text = await page.evaluate((el) => el.textContent || "", btn);
-      if (text.trim() === "Add Cargo") {
+      const t = text.trim();
+      if (t === "Add Cargo" || t.startsWith("Cargo for ")) {
         await btn.click();
         clicked = true;
         break;
       }
     }
-    assert.ok(clicked, "Add Cargo button not found");
+    assert.ok(clicked, "Cargo form toggle button not found");
 
     await page.waitForSelector("#materialDescription", { timeout: 5000 });
     await page.select("#materialCategory", "CASING");
@@ -276,23 +280,44 @@ async function browserJobCreation() {
     const tabletText = await page.evaluate(() => document.body.innerText);
     assert.ok(tabletText.includes("Customers"), "tablet customers page failed");
 
-    // VIEW_ONLY login: can read, pages load
+    // VIEW_ONLY login: clear session cookies then authenticate as viewer
     await page.setViewport({ width: 1440, height: 900 });
-    await page.goto(`${BASE}/login`, { waitUntil: "networkidle0" });
-    if (page.url().includes("/login")) {
-      await page.click("#email", { clickCount: 3 });
-      await page.type("#email", "viewer@elite-loadboard.local");
-      await page.click("#password", { clickCount: 3 });
-      await page.type("#password", "viewer123!");
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: "networkidle0" }),
-        page.click('button[type="submit"]'),
-      ]);
+    const sessionCookies = await page.cookies();
+    if (sessionCookies.length) {
+      await page.deleteCookie(...sessionCookies.map((c) => ({ name: c.name })));
     }
+    await page.goto(`${BASE}/login`, { waitUntil: "networkidle0" });
+    await page.waitForSelector("#email", { timeout: 10000 });
+    await page.click("#email", { clickCount: 3 });
+    await page.type("#email", "viewer@elite-loadboard.local");
+    await page.click("#password", { clickCount: 3 });
+    await page.type("#password", "viewer123!");
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle0" }),
+      page.click('button[type="submit"]'),
+    ]);
 
     await page.goto(`${BASE}/customers`, { waitUntil: "networkidle0" });
     const viewerCustomers = await page.evaluate(() => document.body.innerText);
     assert.ok(viewerCustomers.includes("Customers"), "VIEW_ONLY cannot open customers");
+    assert.ok(
+      !/\bAdd Customer\b/.test(viewerCustomers),
+      "VIEW_ONLY should not see Add Customer control"
+    );
+
+    await page.goto(`${BASE}/load-board`, { waitUntil: "networkidle0" });
+    const viewerBoard = await page.evaluate(() => document.body.innerText);
+    assert.ok(
+      !/\bCreate Job\b/.test(viewerBoard),
+      "VIEW_ONLY should not see Create Job on load board"
+    );
+
+    await page.goto(`${BASE}/drivers`, { waitUntil: "networkidle0" });
+    const viewerDrivers = await page.evaluate(() => document.body.innerText);
+    assert.ok(
+      !/\bAdd Driver\b/.test(viewerDrivers),
+      "VIEW_ONLY should not see Add Driver control"
+    );
 
     return {
       jobUrl,
@@ -302,6 +327,7 @@ async function browserJobCreation() {
         "Load board columns render",
         "Mobile/tablet viewports render content",
         "VIEW_ONLY can open customers (read path)",
+        "VIEW_ONLY write controls hidden on customers/load-board/drivers",
       ],
     };
   } finally {

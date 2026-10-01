@@ -68,6 +68,17 @@ Permissions are checked **server-side** on every mutation/query. UI hiding is co
 - Financial records (invoices, settlements, payments), completed jobs, audit logs, and documents are never hard-deleted
 - Soft-delete via `deletedAt` where archival is needed
 - Multi-record writes use Prisma `$transaction`
+- **Job soft-delete / archive:** setting `deletedAt` on a Job also soft-deletes (archives) all of its TruckAssignments in the same transaction and marks them `CANCELLED`. Operational lists exclude `deletedAt != null`. Historical rows remain in the database for audit/history — no orphan trucks remain visible on the load board.
+
+### Revenue Hierarchy (authoritative rule)
+
+Job financial aggregation distinguishes parent Job customer rate from truck-level allocations:
+
+1. **If the parent Job has an explicit `customerRate`**, that value is the authoritative Job revenue. Truck `revenueAllocation` values may still be used for per-truck profitability views but are **not** added again into parent Job revenue (no double-counting).
+2. **If no parent Job `customerRate` is supplied**, Job revenue is derived as the sum of active (non-cancelled) truck `revenueAllocation` values.
+3. Job cost is always aggregated from TruckAssignment costs (carrier/driver rates + accessorials + additional costs).
+
+This rule is implemented in `recalculateJobAggregates` (`src/server/jobs.ts`) and covered by integration tests.
 
 ---
 
@@ -246,39 +257,48 @@ STORAGE_LOCAL_PATH=./storage
 
 ## 7. Implementation Phases
 
-### PHASE 1 — Foundation ✅
+### PHASE 1 — Foundation ✅ COMPLETE
 - Next.js + Tailwind + UI primitives
-- Prisma schema (full core models) + initial migration
-- Auth.js credentials + RBAC
-- App shell / navigation
-- Dense ops design direction
+- Prisma schema (full core models) + migrations
+- Auth.js credentials + RBAC (server-side enforcement + UI `Can` gating)
+- App shell / navigation (product labels; no phase banners in UI)
 - Calculation utilities (pipe, weight, financial, job status, compliance, paperwork)
-- CompanySettings + compliance requirement seed
-- Identifier generators + storage abstraction + audit helper
+- CompanySettings (company, timezone, units, job numbering, weight warning threshold)
+- Identifier generators (collision-safe within transactions) + storage abstraction + audit helper
+- Global search (jobs, customers, carriers, drivers, equipment; extensible for BOL/POD/invoice later)
 
-### PHASE 2 — Master Data ✅
-- Customers (+ contacts, locations, job history views)
-- Carriers (+ drivers/equipment summary, compliance doc placeholders)
-- Drivers (+ CDL/medical expiration status)
-- Equipment (tractors/trailers)
+### PHASE 2 — Master Data ✅ COMPLETE
+- Customers: create / view / edit / archive + contacts + locations + notes/billing
+- Carriers: create / view / edit / archive + MC/USDOT + dispatch/accounting contacts + notes
+- Drivers: create / view / edit / archive + CDL/medical/TWIC + carrier relationship + notes
+- Equipment: tractors & trailers create / view / edit / deactivate with unit/make/model/type/length
+- Dedicated forms with field-level validation (no raw Zod errors in UI)
 
-### PHASE 3 — Jobs Core ✅
-- Job CRUD with oilfield location fields
-- TruckAssignment generation (N trucks)
-- CargoItems + pipe weight calculator (centralized)
-- Multi-truck builder (add/remove/duplicate)
-- Job detail screen with per-truck cargo
+### PHASE 3 — Jobs Core ✅ COMPLETE
+- Job create with oilfield location fields (dedicated form)
+- TruckAssignment generation (N trucks) + add / remove / duplicate
+- CargoItems per truck + pipe weight calculator (centralized); cargo never bulk-overwritten
+- Tractor + trailer selectors (DB records; filterable by carrier) with Unit/Make/Model and Type/Length labels
+- Bulk truck actions: assign carrier, pickup date/time, equipment/trailer type
+- Job detail multi-truck workspace (TRUCK #, DRIVER, CARRIER, TRACTOR, TRAILER, CARGO, FOOTAGE, WEIGHT, STATUS + need badges)
+- Soft-delete job archives child truck assignments
+- Revenue hierarchy: parent `customerRate` authoritative when set; else sum of truck allocations
 
-## Phase 1–4 status (post-audit)
+### PHASE 4 — Load Board ✅ COMPLETE
+- Future / Today / Dispatched columns from real assignment data
+- Server-side filters: customer, date range, job status, dispatcher, carrier, driver, pickup/delivery location, jobs needing trucks, free-text; clear + combine filters; empty states
+- Job cards show trucks required / assigned / dispatched / delivered / needed from TruckAssignment data
+
+## Phase 1–4 status (post-remediation)
 
 | Phase | Verdict | Notes |
 |---|---|---|
-| 1 Foundation | **COMPLETE** | Auth, schema, shell, calcs, seed — verified |
-| 2 Master data | **PARTIAL** | Create/list/detail work; edit UIs and carrier-contact UI incomplete |
-| 3 Jobs core | **COMPLETE** (with gaps) | Multi-truck + cargo isolation verified via UI+DB; tractor/trailer ID pickers and bulk-assign UI incomplete |
-| 4 Load board | **PARTIAL** | Future/Today/Dispatched works with real data; advanced filters not built |
+| 1 Foundation | **COMPLETE** | Auth, schema, shell, calcs, settings, global search, seed — verified |
+| 2 Master data | **COMPLETE** | Full CRUD/archive workflows for customers, carriers, drivers, equipment |
+| 3 Jobs core | **COMPLETE** | Multi-truck independence, equipment selection, bulk actions, revenue rule |
+| 4 Load board | **COMPLETE** | Columns + operational filters + accurate truck counts |
 
-See latest audit commit / report for Fixed / Missing / Technical Debt.
+Do **not** begin Phase 5 until explicitly approved.
 
 ### PHASE 5 — Documents & Compliance
 - Upload/download via storage abstraction
@@ -294,8 +314,8 @@ See latest audit commit / report for Fixed / Missing / Technical Debt.
 - Paperwork-gated payment readiness
 
 ### PHASE 7 — Dashboard, Search, Reports
-- Executive metrics with deep links
-- Global search
+- Executive metrics with deep links (basic dashboard live; full reports later)
+- Global search (foundation live in Phase 1 remediation; BOL/POD/invoice IDs later)
 - Basic operational reports
 
 ### PHASE 8 — Polish
@@ -318,6 +338,8 @@ See latest audit commit / report for Fixed / Missing / Technical Debt.
 | `lib/calculations/compliance.ts` | Document valid / expires soon / expired / missing |
 | `lib/calculations/paperwork.ts` | Checklist completeness → payment hold |
 
+Integration harness: `npm run test:integration` (`scripts/integration-phases-1-4.ts`).
+
 ---
 
 ## 9. Success Criteria for MVP
@@ -328,9 +350,9 @@ Dispatchers can:
 2. Assign different cargo to each truck
 3. See accurate weight totals and overweight warnings
 4. Operate from Future / Today / Dispatched load board
-5. Track BOL/POD per truck
-6. See job profitability and AR/AP status
-7. Get compliance and paperwork alerts
+5. Track BOL/POD per truck *(Phase 5)*
+6. See job profitability and AR/AP status *(Phase 6)*
+7. Get compliance and paperwork alerts *(Phase 5)*
 
 ---
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUserPermission } from "@/lib/auth/session";
 import { writeAuditLog } from "@/server/audit";
@@ -9,15 +10,7 @@ import {
   customerContactSchema,
   customerLocationSchema,
 } from "@/lib/validators/master-data";
-import { Prisma } from "@prisma/client";
-
-function emptyToNull<T extends Record<string, unknown>>(obj: T): T {
-  const out = { ...obj };
-  for (const key of Object.keys(out)) {
-    if (out[key] === "") (out as Record<string, unknown>)[key] = null;
-  }
-  return out;
-}
+import { ActionError, emptyToNull, parseWithFieldErrors } from "@/lib/validators/form";
 
 export async function listCustomers(query?: string) {
   await requireUserPermission("customers:read");
@@ -70,7 +63,9 @@ export async function getCustomer(id: string) {
 
 export async function createCustomer(raw: unknown) {
   const session = await requireUserPermission("customers:write");
-  const data = emptyToNull(customerSchema.parse(raw));
+  const parsed = parseWithFieldErrors(customerSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
 
   const customer = await prisma.customer.create({
     data: {
@@ -96,10 +91,12 @@ export async function createCustomer(raw: unknown) {
 
 export async function updateCustomer(id: string, raw: unknown) {
   const session = await requireUserPermission("customers:write");
-  const data = emptyToNull(customerSchema.parse(raw));
+  const parsed = parseWithFieldErrors(customerSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
 
   const previous = await prisma.customer.findFirst({ where: { id, deletedAt: null } });
-  if (!previous) throw new Error("Customer not found");
+  if (!previous) throw new ActionError("Customer not found");
 
   const customer = await prisma.customer.update({
     where: { id },
@@ -143,7 +140,12 @@ export async function softDeleteCustomer(id: string) {
 
 export async function addCustomerContact(customerId: string, raw: unknown) {
   await requireUserPermission("customers:write");
-  const data = emptyToNull(customerContactSchema.parse(raw));
+  const parsed = parseWithFieldErrors(
+    customerContactSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
   const email = data.email === "" ? null : data.email;
   const contact = await prisma.customerContact.create({
     data: { ...data, email, customerId },
@@ -152,9 +154,47 @@ export async function addCustomerContact(customerId: string, raw: unknown) {
   return contact;
 }
 
+export async function updateCustomerContact(contactId: string, raw: unknown) {
+  await requireUserPermission("customers:write");
+  const parsed = parseWithFieldErrors(
+    customerContactSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
+  const existing = await prisma.customerContact.findFirst({
+    where: { id: contactId, deletedAt: null },
+  });
+  if (!existing) throw new ActionError("Contact not found");
+  const contact = await prisma.customerContact.update({
+    where: { id: contactId },
+    data: { ...data, email: data.email === "" ? null : data.email },
+  });
+  revalidatePath(`/customers/${existing.customerId}`);
+  return contact;
+}
+
+export async function softDeleteCustomerContact(contactId: string) {
+  await requireUserPermission("customers:write");
+  const existing = await prisma.customerContact.findFirst({
+    where: { id: contactId, deletedAt: null },
+  });
+  if (!existing) throw new ActionError("Contact not found");
+  await prisma.customerContact.update({
+    where: { id: contactId },
+    data: { deletedAt: new Date() },
+  });
+  revalidatePath(`/customers/${existing.customerId}`);
+}
+
 export async function addCustomerLocation(customerId: string, raw: unknown) {
   await requireUserPermission("customers:write");
-  const data = emptyToNull(customerLocationSchema.parse(raw));
+  const parsed = parseWithFieldErrors(
+    customerLocationSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
   const location = await prisma.customerLocation.create({
     data: {
       ...data,
@@ -171,4 +211,47 @@ export async function addCustomerLocation(customerId: string, raw: unknown) {
   });
   revalidatePath(`/customers/${customerId}`);
   return location;
+}
+
+export async function updateCustomerLocation(locationId: string, raw: unknown) {
+  await requireUserPermission("customers:write");
+  const parsed = parseWithFieldErrors(
+    customerLocationSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
+  const existing = await prisma.customerLocation.findFirst({
+    where: { id: locationId, deletedAt: null },
+  });
+  if (!existing) throw new ActionError("Location not found");
+  const location = await prisma.customerLocation.update({
+    where: { id: locationId },
+    data: {
+      ...data,
+      latitude:
+        data.latitude === null || data.latitude === undefined
+          ? null
+          : new Prisma.Decimal(data.latitude),
+      longitude:
+        data.longitude === null || data.longitude === undefined
+          ? null
+          : new Prisma.Decimal(data.longitude),
+    },
+  });
+  revalidatePath(`/customers/${existing.customerId}`);
+  return location;
+}
+
+export async function softDeleteCustomerLocation(locationId: string) {
+  await requireUserPermission("customers:write");
+  const existing = await prisma.customerLocation.findFirst({
+    where: { id: locationId, deletedAt: null },
+  });
+  if (!existing) throw new ActionError("Location not found");
+  await prisma.customerLocation.update({
+    where: { id: locationId },
+    data: { deletedAt: new Date() },
+  });
+  revalidatePath(`/customers/${existing.customerId}`);
 }

@@ -1,18 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireUserPermission } from "@/lib/auth/session";
 import { writeAuditLog } from "@/server/audit";
 import { carrierSchema } from "@/lib/validators/master-data";
+import { ActionError, emptyToNull, parseWithFieldErrors } from "@/lib/validators/form";
 
-function emptyToNull<T extends Record<string, unknown>>(obj: T): T {
-  const out = { ...obj };
-  for (const key of Object.keys(out)) {
-    if (out[key] === "") (out as Record<string, unknown>)[key] = null;
-  }
-  return out;
-}
+const carrierContactSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200),
+  title: z.string().max(100).optional().nullable(),
+  email: z.string().email("Enter a valid email").optional().nullable().or(z.literal("")),
+  phone: z.string().max(40).optional().nullable(),
+  mobile: z.string().max(40).optional().nullable(),
+  role: z.string().max(100).optional().nullable(),
+  isPrimary: z.boolean().default(false),
+});
 
 export async function listCarriers(query?: string) {
   await requireUserPermission("carriers:read");
@@ -31,7 +35,7 @@ export async function listCarriers(query?: string) {
         : {}),
     },
     include: {
-      _count: { select: { drivers: true, tractors: true, trailers: true, documents: true } },
+      _count: { select: { drivers: true, tractors: true, trailers: true, documents: true, contacts: true } },
     },
     orderBy: { legalName: "asc" },
     take: 100,
@@ -54,7 +58,9 @@ export async function getCarrier(id: string) {
 
 export async function createCarrier(raw: unknown) {
   const session = await requireUserPermission("carriers:write");
-  const data = emptyToNull(carrierSchema.parse(raw));
+  const parsed = parseWithFieldErrors(carrierSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
   const email = data.email === "" ? null : data.email;
 
   const carrier = await prisma.carrier.create({
@@ -75,11 +81,13 @@ export async function createCarrier(raw: unknown) {
 
 export async function updateCarrier(id: string, raw: unknown) {
   const session = await requireUserPermission("carriers:write");
-  const data = emptyToNull(carrierSchema.parse(raw));
+  const parsed = parseWithFieldErrors(carrierSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
   const email = data.email === "" ? null : data.email;
 
   const previous = await prisma.carrier.findFirst({ where: { id, deletedAt: null } });
-  if (!previous) throw new Error("Carrier not found");
+  if (!previous) throw new ActionError("Carrier not found");
 
   const carrier = await prisma.carrier.update({
     where: { id },
@@ -110,7 +118,7 @@ export async function softDeleteCarrier(id: string) {
   const session = await requireUserPermission("carriers:write");
   await prisma.carrier.update({
     where: { id },
-    data: { deletedAt: new Date(), status: "ARCHIVED" },
+    data: { deletedAt: new Date(), status: "ARCHIVED", approvalStatus: "INACTIVE" },
   });
   await writeAuditLog({
     userId: session.user.id,
@@ -119,4 +127,56 @@ export async function softDeleteCarrier(id: string) {
     entityId: id,
   });
   revalidatePath("/carriers");
+}
+
+export async function addCarrierContact(carrierId: string, raw: unknown) {
+  await requireUserPermission("carriers:write");
+  const parsed = parseWithFieldErrors(
+    carrierContactSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
+  const contact = await prisma.carrierContact.create({
+    data: {
+      ...data,
+      email: data.email === "" ? null : data.email,
+      carrierId,
+    },
+  });
+  revalidatePath(`/carriers/${carrierId}`);
+  return contact;
+}
+
+export async function updateCarrierContact(contactId: string, raw: unknown) {
+  await requireUserPermission("carriers:write");
+  const parsed = parseWithFieldErrors(
+    carrierContactSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
+  const existing = await prisma.carrierContact.findFirst({
+    where: { id: contactId, deletedAt: null },
+  });
+  if (!existing) throw new ActionError("Contact not found");
+  const contact = await prisma.carrierContact.update({
+    where: { id: contactId },
+    data: { ...data, email: data.email === "" ? null : data.email },
+  });
+  revalidatePath(`/carriers/${existing.carrierId}`);
+  return contact;
+}
+
+export async function softDeleteCarrierContact(contactId: string) {
+  await requireUserPermission("carriers:write");
+  const existing = await prisma.carrierContact.findFirst({
+    where: { id: contactId, deletedAt: null },
+  });
+  if (!existing) throw new ActionError("Contact not found");
+  await prisma.carrierContact.update({
+    where: { id: contactId },
+    data: { deletedAt: new Date() },
+  });
+  revalidatePath(`/carriers/${existing.carrierId}`);
 }

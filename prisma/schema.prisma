@@ -53,6 +53,8 @@ model CompanySettings {
   id                        String   @id @default(cuid())
   companyName               String   @default("ELITE Logistics")
   jobNumberPrefix           String   @default("JOB")
+  jobNumberIncludeYear      Boolean  @default(true)
+  jobNumberPadWidth         Int      @default(6)
   jobNumberFormat           String   @default("{PREFIX}-{YYYY}-{######}")
   truckNumberPrefix         String   @default("TRK")
   invoiceNumberPrefix       String   @default("INV")
@@ -61,6 +63,9 @@ model CompanySettings {
   nextInvoiceSequence       Int      @default(1)
   nextSettlementSequence    Int      @default(1)
   defaultWeightWarningLbs   Decimal  @default(48000) @db.Decimal(12, 2)
+  /// Reserved for future per-equipment overrides; default operational warning only.
+  weightUnit                String   @default("lb")
+  distanceUnit              String   @default("mi")
   expiresSoonDays           Int      @default(30)
   timezone                  String   @default("America/Chicago")
   createdAt                 DateTime @default(now())

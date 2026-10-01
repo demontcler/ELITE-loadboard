@@ -156,8 +156,9 @@ export const cargoItemSchema = z.object({
 });
 
 export const bulkAssignSchema = z.object({
-  truckAssignmentIds: z.array(z.string()).min(1),
+  truckAssignmentIds: z.array(z.string()).min(1, "Select at least one truck"),
   carrierId: z.string().optional().nullable(),
+  pickupDate: z.string().optional().nullable(),
   pickupTime: z.string().optional().nullable(),
   equipmentType: z.string().optional().nullable(),
   trailerType: z

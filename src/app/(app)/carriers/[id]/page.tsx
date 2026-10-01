@@ -1,15 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCarrier } from "@/server/carriers";
+import {
+  getCarrier,
+  updateCarrier,
+  softDeleteCarrier,
+  addCarrierContact,
+  softDeleteCarrierContact,
+} from "@/server/carriers";
 import { PageHeader, StatusBadge, EmptyState, DataTable } from "@/components/shared/page-chrome";
+import { DedicatedEntityForm } from "@/components/forms/dedicated-entity-form";
+import { Can } from "@/components/auth/can";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArchiveButton } from "@/components/shared/archive-button";
 
 export default async function CarrierDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const carrier = await getCarrier(id);
   if (!carrier) notFound();
 
@@ -26,12 +38,112 @@ export default async function CarrierDetailPage({
         title={carrier.legalName}
         description={carrier.dba ? `DBA ${carrier.dba}` : "Carrier profile"}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <StatusBadge status={carrier.approvalStatus} />
             <StatusBadge status={carrier.status} />
+            <Can permission="carriers:write">
+              <Link
+                href={`/carriers/${id}?edit=1`}
+                className="h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium leading-8 hover:bg-slate-50"
+              >
+                Edit
+              </Link>
+              <ArchiveButton
+                label="Archive"
+                action={async () => {
+                  "use server";
+                  await softDeleteCarrier(id);
+                }}
+              />
+            </Can>
           </div>
         }
       />
+
+      <Can permission="carriers:write">
+        {sp.edit === "1" ? (
+          <DedicatedEntityForm
+            title="Edit Carrier"
+            submitLabel="Save Changes"
+            redirectTo={`/carriers/${id}`}
+            defaultValues={{
+              legalName: carrier.legalName,
+              dba: carrier.dba ?? "",
+              mcNumber: carrier.mcNumber ?? "",
+              usdotNumber: carrier.usdotNumber ?? "",
+              taxId: carrier.taxId ?? "",
+              phone: carrier.phone ?? "",
+              email: carrier.email ?? "",
+              address1: carrier.address1 ?? "",
+              city: carrier.city ?? "",
+              state: carrier.state ?? "",
+              zip: carrier.zip ?? "",
+              approvalStatus: carrier.approvalStatus,
+              status: carrier.status,
+              paymentTerms: carrier.paymentTerms,
+              preferredPaymentMethod: carrier.preferredPaymentMethod ?? "",
+              safetyNotes: carrier.safetyNotes ?? "",
+              internalNotes: carrier.internalNotes ?? "",
+            }}
+            fields={[
+              { name: "legalName", label: "Legal Name", required: true, section: "Company" },
+              { name: "dba", label: "DBA", section: "Company" },
+              { name: "mcNumber", label: "MC", section: "Authority" },
+              { name: "usdotNumber", label: "USDOT", section: "Authority" },
+              { name: "taxId", label: "Tax ID", section: "Authority" },
+              { name: "phone", label: "Phone", section: "Contact" },
+              { name: "email", label: "Email", type: "email", section: "Contact" },
+              { name: "address1", label: "Address", section: "Address", fullWidth: true },
+              { name: "city", label: "City", section: "Address" },
+              { name: "state", label: "State", section: "Address" },
+              { name: "zip", label: "ZIP", section: "Address" },
+              {
+                name: "approvalStatus",
+                label: "Approval",
+                section: "Status",
+                options: [
+                  { value: "PENDING", label: "Pending" },
+                  { value: "APPROVED", label: "Approved" },
+                  { value: "PREFERRED", label: "Preferred" },
+                  { value: "RESTRICTED", label: "Restricted" },
+                  { value: "INACTIVE", label: "Inactive" },
+                ],
+              },
+              {
+                name: "status",
+                label: "Status",
+                section: "Status",
+                options: [
+                  { value: "ACTIVE", label: "Active" },
+                  { value: "INACTIVE", label: "Inactive" },
+                  { value: "RESTRICTED", label: "Restricted" },
+                  { value: "ARCHIVED", label: "Archived" },
+                ],
+              },
+              {
+                name: "paymentTerms",
+                label: "Payment Terms",
+                section: "Accounting",
+                options: [
+                  { value: "NET_30", label: "Net 30" },
+                  { value: "NET_15", label: "Net 15" },
+                  { value: "NET_45", label: "Net 45" },
+                  { value: "DUE_ON_RECEIPT", label: "Due on Receipt" },
+                  { value: "CUSTOM", label: "Custom" },
+                  { value: "NET_60", label: "Net 60" },
+                ],
+              },
+              { name: "preferredPaymentMethod", label: "Pay Method", section: "Accounting" },
+              { name: "safetyNotes", label: "Safety Notes", section: "Notes", fullWidth: true },
+              { name: "internalNotes", label: "Internal Notes", section: "Notes", fullWidth: true },
+            ]}
+            onSubmit={async (data) => {
+              "use server";
+              return updateCarrier(id, data);
+            }}
+          />
+        ) : null}
+      </Can>
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Card>
@@ -48,16 +160,12 @@ export default async function CarrierDetailPage({
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Address</CardTitle>
+            <CardTitle>Address / Terms</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-slate-600">
             <div>{carrier.address1 ?? "—"}</div>
-            <div>
-              {[carrier.city, carrier.state, carrier.zip].filter(Boolean).join(", ") || "—"}
-            </div>
-            <div className="mt-2">
-              Terms: {carrier.paymentTerms.replaceAll("_", " ")}
-            </div>
+            <div>{[carrier.city, carrier.state, carrier.zip].filter(Boolean).join(", ") || "—"}</div>
+            <div className="mt-2">Terms: {carrier.paymentTerms.replaceAll("_", " ")}</div>
             <div>Pay method: {carrier.preferredPaymentMethod ?? "—"}</div>
           </CardContent>
         </Card>
@@ -79,9 +187,66 @@ export default async function CarrierDetailPage({
       </div>
 
       <section className="space-y-2">
+        <h2 className="text-sm font-semibold">Contacts (Dispatch / Accounting)</h2>
+        <Can permission="carriers:write">
+          <DedicatedEntityForm
+            title="Add Contact"
+            submitLabel="Add Contact"
+            collapsible
+            fields={[
+              { name: "name", label: "Name", required: true, section: "Contact" },
+              { name: "title", label: "Title", section: "Contact" },
+              { name: "email", label: "Email", type: "email", section: "Contact" },
+              { name: "phone", label: "Phone", section: "Contact" },
+              { name: "mobile", label: "Mobile", section: "Contact" },
+              {
+                name: "role",
+                label: "Role",
+                section: "Contact",
+                options: [
+                  { value: "Primary", label: "Primary" },
+                  { value: "Dispatch", label: "Dispatch" },
+                  { value: "Accounting", label: "Accounting" },
+                ],
+              },
+            ]}
+            onSubmit={async (data) => {
+              "use server";
+              await addCarrierContact(id, data);
+            }}
+          />
+        </Can>
+        {carrier.contacts.length === 0 ? (
+          <EmptyState message="No contacts yet." />
+        ) : (
+          <DataTable headers={["Name", "Role", "Email", "Phone", ""]}>
+            {carrier.contacts.map((c) => (
+              <tr key={c.id}>
+                <td className="px-3 py-2 font-medium">{c.name}</td>
+                <td className="px-3 py-2">{c.role ?? "—"}</td>
+                <td className="px-3 py-2">{c.email ?? "—"}</td>
+                <td className="px-3 py-2">{c.phone ?? "—"}</td>
+                <td className="px-3 py-2 text-right">
+                  <Can permission="carriers:write">
+                    <ArchiveButton
+                      label="Remove"
+                      action={async () => {
+                        "use server";
+                        await softDeleteCarrierContact(c.id);
+                      }}
+                    />
+                  </Can>
+                </td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+      </section>
+
+      <section className="space-y-2">
         <h2 className="text-sm font-semibold">Drivers</h2>
         {carrier.drivers.length === 0 ? (
-          <EmptyState message="No drivers linked to this carrier." />
+          <EmptyState message="No drivers linked." />
         ) : (
           <DataTable headers={["Name", "Phone", "CDL", "Status"]}>
             {carrier.drivers.map((d) => (
@@ -110,14 +275,17 @@ export default async function CarrierDetailPage({
             {carrier.tractors.length === 0 ? (
               <EmptyState message="No tractors." />
             ) : (
-              <DataTable headers={["Unit", "Year/Make", "Plate", "Status"]}>
+              <DataTable headers={["Unit", "Year/Make", "Status"]}>
                 {carrier.tractors.map((t) => (
                   <tr key={t.id}>
-                    <td className="px-3 py-2 font-medium">{t.unitNumber}</td>
+                    <td className="px-3 py-2 font-medium">
+                      <Link href={`/equipment/tractors/${t.id}`} className="hover:underline">
+                        {t.unitNumber}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2">
                       {[t.year, t.make, t.model].filter(Boolean).join(" ") || "—"}
                     </td>
-                    <td className="px-3 py-2">{t.licensePlate ?? "—"}</td>
                     <td className="px-3 py-2">
                       <StatusBadge status={t.status} />
                     </td>
@@ -131,15 +299,16 @@ export default async function CarrierDetailPage({
             {carrier.trailers.length === 0 ? (
               <EmptyState message="No trailers." />
             ) : (
-              <DataTable headers={["Unit", "Type", "Payload", "Status"]}>
+              <DataTable headers={["Unit", "Type", "Status"]}>
                 {carrier.trailers.map((t) => (
                   <tr key={t.id}>
-                    <td className="px-3 py-2 font-medium">{t.unitNumber}</td>
-                    <td className="px-3 py-2">
-                      {t.customType || t.trailerType.replaceAll("_", " ")}
+                    <td className="px-3 py-2 font-medium">
+                      <Link href={`/equipment/trailers/${t.id}`} className="hover:underline">
+                        {t.unitNumber}
+                      </Link>
                     </td>
                     <td className="px-3 py-2">
-                      {t.maxPayloadLbs ? `${t.maxPayloadLbs.toString()} lb` : "—"}
+                      {t.customType || t.trailerType.replaceAll("_", " ")}
                     </td>
                     <td className="px-3 py-2">
                       <StatusBadge status={t.status} />
@@ -150,28 +319,6 @@ export default async function CarrierDetailPage({
             )}
           </div>
         </div>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Compliance documents</h2>
-        {carrier.documents.length === 0 ? (
-          <EmptyState message="COI, W-9, authority, and agreements upload in Phase 5." />
-        ) : (
-          <DataTable headers={["Type", "File", "Status", "Expires"]}>
-            {carrier.documents.map((doc) => (
-              <tr key={doc.id}>
-                <td className="px-3 py-2">{doc.documentType}</td>
-                <td className="px-3 py-2">{doc.fileName}</td>
-                <td className="px-3 py-2">
-                  <StatusBadge status={doc.status} />
-                </td>
-                <td className="px-3 py-2">
-                  {doc.expirationDate ? doc.expirationDate.toISOString().slice(0, 10) : "—"}
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
       </section>
     </div>
   );

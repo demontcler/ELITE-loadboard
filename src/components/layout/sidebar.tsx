@@ -13,9 +13,9 @@ import {
   FileText,
   BarChart3,
   Settings,
-  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GlobalSearch } from "@/components/layout/global-search";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -67,10 +67,6 @@ export function AppSidebar() {
           );
         })}
       </nav>
-
-      <div className="border-t border-slate-800 px-3 py-3 text-[11px] text-slate-500">
-        Phase 1 foundation
-      </div>
     </aside>
   );
 }
@@ -83,14 +79,8 @@ export function AppHeader({
   role: string;
 }) {
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
-      <div className="flex max-w-md flex-1 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-400">
-        <Search className="h-3.5 w-3.5" />
-        <span>Search jobs, PO, carriers, drivers, rigs…</span>
-        <kbd className="ml-auto rounded border border-slate-200 bg-white px-1.5 text-[10px] text-slate-500">
-          /
-        </kbd>
-      </div>
+    <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
+      <GlobalSearch />
       <div className="flex items-center gap-3 text-sm">
         <div className="text-right">
           <div className="font-medium text-slate-900">{userName}</div>
@@ -98,9 +88,10 @@ export function AppHeader({
             {role.replaceAll("_", " ")}
           </div>
         </div>
-        <form action="/api/auth/signout" method="POST">
+        <form action="/api/auth/signout" method="POST" className="shrink-0">
           <button
             type="submit"
+            name="signout"
             className="rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
           >
             Sign out

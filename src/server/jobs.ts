@@ -20,6 +20,7 @@ import {
   cargoItemSchema,
   bulkAssignSchema,
 } from "@/lib/validators/jobs";
+import { ActionError, parseWithFieldErrors } from "@/lib/validators/form";
 
 function emptyToNull<T extends Record<string, unknown>>(obj: T): T {
   const out = { ...obj };
@@ -141,35 +142,109 @@ async function recalculateJobAggregates(jobId: string) {
   });
 }
 
+export async function listDispatchers() {
+  await requireUserPermission("jobs:read");
+  return prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      isActive: true,
+      role: { in: ["ADMIN", "DISPATCHER", "OPERATIONS_MANAGER"] },
+    },
+    select: { id: true, firstName: true, lastName: true, role: true },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    take: 100,
+  });
+}
+
 export async function listJobs(filters?: {
   q?: string;
   status?: string;
   customerId?: string;
+  dispatcherId?: string;
+  carrierId?: string;
+  driverId?: string;
+  pickupDateFrom?: string;
+  pickupDateTo?: string;
+  pickupLocation?: string;
+  deliveryLocation?: string;
+  needsTrucks?: boolean;
 }) {
   await requireUserPermission("jobs:read");
+
+  const pickupFrom = filters?.pickupDateFrom ? new Date(filters.pickupDateFrom) : null;
+  const pickupTo = filters?.pickupDateTo ? new Date(filters.pickupDateTo) : null;
+  if (pickupTo) pickupTo.setHours(23, 59, 59, 999);
+
+  const and: Prisma.JobWhereInput[] = [];
+  if (filters?.pickupLocation) {
+    and.push({
+      OR: [
+        { pickupName: { contains: filters.pickupLocation, mode: "insensitive" } },
+        { pickupCity: { contains: filters.pickupLocation, mode: "insensitive" } },
+        { pickupCounty: { contains: filters.pickupLocation, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (filters?.deliveryLocation) {
+    and.push({
+      OR: [
+        { deliveryName: { contains: filters.deliveryLocation, mode: "insensitive" } },
+        { deliveryCity: { contains: filters.deliveryLocation, mode: "insensitive" } },
+        { deliveryCounty: { contains: filters.deliveryLocation, mode: "insensitive" } },
+        { rigName: { contains: filters.deliveryLocation, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (filters?.needsTrucks) {
+    and.push({
+      OR: [
+        { status: "NEEDS_TRUCKS" },
+        { status: "PARTIALLY_ASSIGNED" },
+        { trucks: { some: { deletedAt: null, status: "UNASSIGNED" } } },
+      ],
+    });
+  }
+  if (filters?.q) {
+    and.push({
+      OR: [
+        { jobNumber: { contains: filters.q, mode: "insensitive" } },
+        { customerPoNumber: { contains: filters.q, mode: "insensitive" } },
+        { rigName: { contains: filters.q, mode: "insensitive" } },
+        { leaseName: { contains: filters.q, mode: "insensitive" } },
+        { wellName: { contains: filters.q, mode: "insensitive" } },
+        { customer: { companyName: { contains: filters.q, mode: "insensitive" } } },
+      ],
+    });
+  }
+
   return prisma.job.findMany({
     where: {
       deletedAt: null,
       ...(filters?.status ? { status: filters.status as never } : {}),
       ...(filters?.customerId ? { customerId: filters.customerId } : {}),
-      ...(filters?.q
+      ...(filters?.dispatcherId ? { dispatcherId: filters.dispatcherId } : {}),
+      ...(pickupFrom || pickupTo
         ? {
-            OR: [
-              { jobNumber: { contains: filters.q, mode: "insensitive" } },
-              { customerPoNumber: { contains: filters.q, mode: "insensitive" } },
-              { rigName: { contains: filters.q, mode: "insensitive" } },
-              { leaseName: { contains: filters.q, mode: "insensitive" } },
-              { wellName: { contains: filters.q, mode: "insensitive" } },
-              { customer: { companyName: { contains: filters.q, mode: "insensitive" } } },
-            ],
+            pickupDate: {
+              ...(pickupFrom ? { gte: pickupFrom } : {}),
+              ...(pickupTo ? { lte: pickupTo } : {}),
+            },
           }
         : {}),
+      ...(filters?.carrierId
+        ? { trucks: { some: { deletedAt: null, carrierId: filters.carrierId } } }
+        : {}),
+      ...(filters?.driverId
+        ? { trucks: { some: { deletedAt: null, driverId: filters.driverId } } }
+        : {}),
+      ...(and.length ? { AND: and } : {}),
     },
     include: {
       customer: { select: { id: true, companyName: true } },
+      dispatcher: { select: { id: true, firstName: true, lastName: true } },
       trucks: {
         where: { deletedAt: null },
-        select: { id: true, status: true, weightWarning: true },
+        select: { id: true, status: true, weightWarning: true, carrierId: true, driverId: true },
       },
     },
     orderBy: [{ pickupDate: "asc" }, { createdAt: "desc" }],
@@ -190,8 +265,10 @@ export async function getJob(id: string) {
         include: {
           carrier: { select: { id: true, legalName: true } },
           driver: { select: { id: true, firstName: true, lastName: true, phone: true } },
-          tractor: { select: { id: true, unitNumber: true } },
-          trailer: { select: { id: true, unitNumber: true, trailerType: true } },
+          tractor: { select: { id: true, unitNumber: true, make: true, model: true, year: true } },
+          trailer: {
+            select: { id: true, unitNumber: true, trailerType: true, lengthFeet: true, customType: true },
+          },
           cargoItems: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
           documents: { where: { deletedAt: null } },
         },
@@ -203,7 +280,9 @@ export async function getJob(id: string) {
 
 export async function createJob(raw: unknown) {
   const session = await requireUserPermission("jobs:write");
-  const data = emptyToNull(jobCreateSchema.parse(raw));
+  const parsed = parseWithFieldErrors(jobCreateSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
   const trucksRequired = data.trucksRequired ?? 1;
 
   const job = await prisma.$transaction(async (tx) => {
@@ -458,9 +537,14 @@ export async function removeTruckAssignment(truckAssignmentId: string) {
 
 export async function updateTruckAssignment(id: string, raw: unknown) {
   const session = await requireUserPermission("jobs:write");
-  const data = emptyToNull(truckAssignmentUpdateSchema.parse(raw));
+  const parsed = parseWithFieldErrors(
+    truckAssignmentUpdateSchema,
+    emptyToNull(raw as Record<string, unknown>)
+  );
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
   const previous = await prisma.truckAssignment.findFirst({ where: { id, deletedAt: null } });
-  if (!previous) throw new Error("Truck assignment not found");
+  if (!previous) throw new ActionError("Truck assignment not found");
 
   let status = data.status as TruckAssignmentStatus | undefined;
   const hasAssignment = data.carrierId || data.driverId || previous.carrierId || previous.driverId;
@@ -525,22 +609,40 @@ export async function updateTruckAssignment(id: string, raw: unknown) {
 
 export async function bulkUpdateTrucks(raw: unknown) {
   await requireUserPermission("jobs:write");
-  const data = bulkAssignSchema.parse(raw);
+  const parsed = parseWithFieldErrors(bulkAssignSchema, raw);
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
+
+  function parseDateLocal(value: string | null | undefined): Date | null {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
 
   const trucks = await prisma.truckAssignment.findMany({
     where: { id: { in: data.truckAssignmentIds }, deletedAt: null },
   });
-  if (trucks.length === 0) throw new Error("No trucks selected");
+  if (trucks.length === 0) throw new ActionError("No trucks selected");
 
-  await prisma.truckAssignment.updateMany({
-    where: { id: { in: data.truckAssignmentIds } },
-    data: {
-      ...(data.carrierId ? { carrierId: data.carrierId, status: "ASSIGNED" } : {}),
-      ...(data.pickupTime ? { pickupTime: data.pickupTime } : {}),
-      ...(data.equipmentType ? { equipmentType: data.equipmentType } : {}),
-      ...(data.trailerType ? { trailerType: data.trailerType } : {}),
-    },
-  });
+  const pickupDate = data.pickupDate !== undefined ? parseDateLocal(data.pickupDate) : undefined;
+
+  for (const truck of trucks) {
+    const nextStatus =
+      data.carrierId && truck.status === "UNASSIGNED"
+        ? ("ASSIGNED" as const)
+        : undefined;
+    await prisma.truckAssignment.update({
+      where: { id: truck.id },
+      data: {
+        ...(data.carrierId ? { carrierId: data.carrierId } : {}),
+        ...(nextStatus ? { status: nextStatus } : {}),
+        ...(pickupDate !== undefined ? { pickupDate } : {}),
+        ...(data.pickupTime ? { pickupTime: data.pickupTime } : {}),
+        ...(data.equipmentType ? { equipmentType: data.equipmentType } : {}),
+        ...(data.trailerType ? { trailerType: data.trailerType } : {}),
+      },
+    });
+  }
 
   const jobId = trucks[0]!.jobId;
   await recalculateJobAggregates(jobId);
@@ -548,14 +650,54 @@ export async function bulkUpdateTrucks(raw: unknown) {
   revalidatePath("/load-board");
 }
 
+/**
+ * Soft-archive a job and its truck assignments.
+ * Historical rows remain in the database with deletedAt set; they are excluded
+ * from operational lists (load board, customer history active views).
+ * Financial/audit records are never hard-deleted.
+ */
+export async function softDeleteJob(id: string) {
+  const session = await requireUserPermission("jobs:write");
+  const job = await prisma.job.findFirst({ where: { id, deletedAt: null } });
+  if (!job) throw new Error("Job not found");
+  if (job.status === "COMPLETED") {
+    throw new Error("Completed jobs cannot be archived from operations; mark cancelled instead if needed.");
+  }
+
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.job.update({
+      where: { id },
+      data: { deletedAt: now, status: job.status === "CANCELLED" ? "CANCELLED" : "CANCELLED", cancelledAt: now },
+    }),
+    prisma.truckAssignment.updateMany({
+      where: { jobId: id, deletedAt: null },
+      data: { deletedAt: now, status: "CANCELLED" },
+    }),
+  ]);
+
+  await writeAuditLog({
+    userId: session.user.id,
+    action: "job.archived",
+    entityType: "Job",
+    entityId: id,
+    previousValue: { status: job.status },
+  });
+
+  revalidatePath("/load-board");
+  revalidatePath(`/jobs/${id}`);
+}
+
 export async function addCargoItem(truckAssignmentId: string, raw: unknown) {
   const session = await requireUserPermission("jobs:write");
-  const data = emptyToNull(cargoItemSchema.parse(raw));
+  const parsed = parseWithFieldErrors(cargoItemSchema, emptyToNull(raw as Record<string, unknown>));
+  if (!parsed.ok) throw new ActionError(parsed.message, parsed.fieldErrors);
+  const data = parsed.data;
 
   const truck = await prisma.truckAssignment.findFirst({
     where: { id: truckAssignmentId, deletedAt: null },
   });
-  if (!truck) throw new Error("Truck assignment not found");
+  if (!truck) throw new ActionError("Truck assignment not found");
 
   const calc = calculatePipeWeight({
     numberOfJoints: data.numberOfJoints,
