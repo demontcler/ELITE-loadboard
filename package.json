@@ -13,6 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "test:calc": "tsx scripts/test-calculations.ts",
+    "test:audit": "tsx scripts/audit-phases-1-4.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate"
   },
@@ -56,6 +57,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.27",
     "prisma": "^6.19.3",
+    "puppeteer-core": "^24.43.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

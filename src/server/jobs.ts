@@ -5,7 +5,7 @@ import { Prisma, type TruckAssignmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireUserPermission } from "@/lib/auth/session";
 import { writeAuditLog } from "@/server/audit";
-import { generateDisplayId, formatTruckDisplayId } from "@/lib/identifiers";
+import { generateDisplayIdInTransaction, formatTruckDisplayId } from "@/lib/identifiers";
 import { calculatePipeWeight } from "@/lib/calculations/pipe";
 import { summarizeTruckWeight } from "@/lib/calculations/weight";
 import { calculateProfitability, sumDecimals } from "@/lib/calculations/financial";
@@ -205,9 +205,10 @@ export async function createJob(raw: unknown) {
   const session = await requireUserPermission("jobs:write");
   const data = emptyToNull(jobCreateSchema.parse(raw));
   const trucksRequired = data.trucksRequired ?? 1;
-  const jobNumber = await generateDisplayId("job");
 
   const job = await prisma.$transaction(async (tx) => {
+    const jobNumber = await generateDisplayIdInTransaction(tx, "job");
+
     const created = await tx.job.create({
       data: {
         jobNumber,
@@ -290,7 +291,7 @@ export async function createJob(raw: unknown) {
     action: "job.created",
     entityType: "Job",
     entityId: job.id,
-    newValue: { jobNumber, trucksRequired },
+    newValue: { jobNumber: job.jobNumber, trucksRequired },
   });
 
   revalidatePath("/load-board");

@@ -47,6 +47,30 @@ async function main() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { email: "ops@elite-loadboard.local" },
+    update: {},
+    create: {
+      email: "ops@elite-loadboard.local",
+      passwordHash: await hash("ops123!", 12),
+      firstName: "Olivia",
+      lastName: "Ops",
+      role: Role.OPERATIONS_MANAGER,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "viewer@elite-loadboard.local" },
+    update: {},
+    create: {
+      email: "viewer@elite-loadboard.local",
+      passwordHash: await hash("viewer123!", 12),
+      firstName: "Victor",
+      lastName: "Viewer",
+      role: Role.VIEW_ONLY,
+    },
+  });
+
   const existingSettings = await prisma.companySettings.findFirst();
   if (!existingSettings) {
     await prisma.companySettings.create({
@@ -375,7 +399,7 @@ async function main() {
     });
 
     await prisma.companySettings.updateMany({
-      data: { nextJobSequence: 2 },
+      data: { nextJobSequence: 3 },
     });
 
     // Future job

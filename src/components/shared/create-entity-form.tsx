@@ -16,6 +16,20 @@ type Field = {
   options?: { value: string; label: string }[];
 };
 
+function buildInitialValues(
+  fields: Field[],
+  defaultValues?: Record<string, string>
+): Record<string, string> {
+  const initial: Record<string, string> = { ...(defaultValues ?? {}) };
+  for (const field of fields) {
+    if (initial[field.name] !== undefined) continue;
+    if (field.options?.length) {
+      initial[field.name] = field.options[0]!.value;
+    }
+  }
+  return initial;
+}
+
 export function CreateEntityForm({
   title,
   fields,
@@ -23,6 +37,7 @@ export function CreateEntityForm({
   submitLabel = "Create",
   defaultValues,
   defaultOpen = false,
+  redirectBasePath,
 }: {
   title: string;
   fields: Field[];
@@ -30,12 +45,16 @@ export function CreateEntityForm({
   submitLabel?: string;
   defaultValues?: Record<string, string>;
   defaultOpen?: boolean;
+  /** If onSubmit returns `{ id }`, navigate to `${redirectBasePath}/${id}` */
+  redirectBasePath?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [values, setValues] = useState<Record<string, string>>(defaultValues ?? {});
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    buildInitialValues(fields, defaultValues)
+  );
 
   function setField(name: string, value: string) {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -48,13 +67,43 @@ export function CreateEntityForm({
       try {
         const payload: Record<string, string> = {};
         for (const field of fields) {
-          payload[field.name] = values[field.name] ?? defaultValues?.[field.name] ?? "";
+          payload[field.name] =
+            values[field.name] ??
+            defaultValues?.[field.name] ??
+            field.options?.[0]?.value ??
+            "";
         }
-        await onSubmit(payload);
+        const result = (await onSubmit(payload)) as
+          | { id?: string; redirectTo?: string }
+          | void
+          | null;
+
+        if (result && typeof result === "object") {
+          if (result.redirectTo) {
+            router.push(result.redirectTo);
+            router.refresh();
+            return;
+          }
+          if (result.id && redirectBasePath) {
+            router.push(`${redirectBasePath}/${result.id}`);
+            router.refresh();
+            return;
+          }
+        }
+
         setOpen(false);
-        setValues(defaultValues ?? {});
+        setValues(buildInitialValues(fields, defaultValues));
         router.refresh();
       } catch (err) {
+        // Next.js redirect() throws; let the framework handle it
+        if (
+          err &&
+          typeof err === "object" &&
+          "digest" in err &&
+          String((err as { digest?: string }).digest).startsWith("NEXT_REDIRECT")
+        ) {
+          throw err;
+        }
         setError(err instanceof Error ? err.message : "Failed to save");
       }
     });

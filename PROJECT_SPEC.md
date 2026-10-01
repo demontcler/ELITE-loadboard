@@ -262,17 +262,23 @@ STORAGE_LOCAL_PATH=./storage
 - Drivers (+ CDL/medical expiration status)
 - Equipment (tractors/trailers)
 
-### PHASE 3 — Jobs Core
-- Job CRUD
+### PHASE 3 — Jobs Core ✅
+- Job CRUD with oilfield location fields
 - TruckAssignment generation (N trucks)
-- CargoItems + pipe weight calculator
-- Multi-truck builder (add/remove/duplicate/bulk assign)
-- Job detail screen
+- CargoItems + pipe weight calculator (centralized)
+- Multi-truck builder (add/remove/duplicate)
+- Job detail screen with per-truck cargo
 
-### PHASE 4 — Load Board
-- Future / Today / Dispatched columns
-- Job cards with progress, margin, alerts
-- Filters + status transitions
+## Phase 1–4 status (post-audit)
+
+| Phase | Verdict | Notes |
+|---|---|---|
+| 1 Foundation | **COMPLETE** | Auth, schema, shell, calcs, seed — verified |
+| 2 Master data | **PARTIAL** | Create/list/detail work; edit UIs and carrier-contact UI incomplete |
+| 3 Jobs core | **COMPLETE** (with gaps) | Multi-truck + cargo isolation verified via UI+DB; tractor/trailer ID pickers and bulk-assign UI incomplete |
+| 4 Load board | **PARTIAL** | Future/Today/Dispatched works with real data; advanced filters not built |
+
+See latest audit commit / report for Fixed / Missing / Technical Debt.
 
 ### PHASE 5 — Documents & Compliance
 - Upload/download via storage abstraction

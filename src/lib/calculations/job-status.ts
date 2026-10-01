@@ -124,11 +124,21 @@ export function deriveJobStatus(
     return "PARTIALLY_DELIVERED";
   }
 
+  // Some trucks moving, others still only assigned/confirmed
+  if (someDispatched && someStillWaiting) {
+    return "PARTIALLY_DISPATCHED";
+  }
+
   if (active.every((s) => DISPATCHED_ACTIVE.has(s) || DELIVERED_DONE.has(s))) {
     const anyInTransit = active.some(
       (s) => s === "IN_TRANSIT" || s === "ARRIVED_DELIVERY" || s === "UNLOADING"
     );
     return anyInTransit ? "IN_TRANSIT" : "DISPATCHED";
+  }
+
+  if (active.every((s) => ASSIGNED_OR_CONFIRMED.has(s))) {
+    const allConfirmed = active.every((s) => s === "CONFIRMED");
+    return allConfirmed ? "READY" : "PARTIALLY_ASSIGNED";
   }
 
   if (active.every((s) => ASSIGNED_OR_CONFIRMED.has(s) || DISPATCHED_ACTIVE.has(s) || DELIVERED_DONE.has(s))) {

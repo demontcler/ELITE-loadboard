@@ -94,6 +94,13 @@ function testJobStatus() {
     "UNASSIGNED",
   ]);
   assert.equal(status, "PARTIALLY_DISPATCHED");
+
+  const partialDispatchStaffed = deriveJobStatus(3, [
+    "DISPATCHED",
+    "ASSIGNED",
+    "ASSIGNED",
+  ]);
+  assert.equal(partialDispatchStaffed, "PARTIALLY_DISPATCHED");
 }
 
 function testLoadBoardColumn() {

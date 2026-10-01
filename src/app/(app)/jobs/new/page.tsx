@@ -3,7 +3,6 @@ import { listCustomers } from "@/server/customers";
 import { createJob } from "@/server/jobs";
 import { PageHeader } from "@/components/shared/page-chrome";
 import { CreateEntityForm } from "@/components/shared/create-entity-form";
-import { redirect } from "next/navigation";
 
 export default async function NewJobPage() {
   const customers = await listCustomers();
@@ -33,6 +32,7 @@ export default async function NewJobPage() {
           title="Job details"
           submitLabel="Create Job"
           defaultOpen
+          redirectBasePath="/jobs"
           fields={[
             {
               name: "customerId",
@@ -105,8 +105,7 @@ export default async function NewJobPage() {
           defaultValues={{ trucksRequired: "1", jobType: "OILFIELD", billingMethod: "PER_TRUCK" }}
           onSubmit={async (data) => {
             "use server";
-            const job = await createJob(data);
-            redirect(`/jobs/${job.id}`);
+            return createJob(data);
           }}
         />
       )}

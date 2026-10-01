@@ -49,6 +49,8 @@ Open [http://localhost:3000](http://localhost:3000).
 | `admin@elite-loadboard.local` | `admin123!` | ADMIN |
 | `dispatch@elite-loadboard.local` | `dispatch123!` | DISPATCHER |
 | `accounting@elite-loadboard.local` | `accounting123!` | ACCOUNTING |
+| `ops@elite-loadboard.local` | `ops123!` | OPERATIONS_MANAGER |
+| `viewer@elite-loadboard.local` | `viewer123!` | VIEW_ONLY |
 
 ### Scripts
 
