@@ -16,6 +16,7 @@
     "test:audit": "tsx scripts/audit-phases-1-4.ts",
     "test:integration": "tsx scripts/integration-phases-1-4.ts",
     "test:phase5": "tsx scripts/integration-phase-5.ts",
+    "test:phase6": "tsx scripts/integration-phase-6.ts",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate"
   },

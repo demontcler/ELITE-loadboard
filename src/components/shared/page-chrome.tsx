@@ -19,6 +19,20 @@ const STATUS_VARIANT: Record<string, "success" | "warning" | "danger" | "default
   OFF_DUTY: "default",
   EXPIRED: "danger",
   MISSING: "danger",
+  READY_TO_INVOICE: "success",
+  READY_FOR_APPROVAL: "success",
+  READY_FOR_PAYMENT: "success",
+  SENT: "info",
+  PAID: "success",
+  PARTIALLY_PAID: "warning",
+  PARTIAL_PAYMENT: "warning",
+  NOT_READY: "danger",
+  PAPERWORK_HOLD: "danger",
+  OVERDUE: "danger",
+  DISPUTED: "warning",
+  VOID: "default",
+  SCHEDULED: "info",
+  DRAFT: "default",
 };
 
 export function StatusBadge({

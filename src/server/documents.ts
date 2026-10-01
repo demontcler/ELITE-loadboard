@@ -202,6 +202,13 @@ export async function uploadDocument(input: UploadDocumentInput) {
       select: { jobId: true },
     });
     if (truck) revalidatePath(`/jobs/${truck.jobId}`);
+    // Recalculate AP/AR paperwork holds without circular static import
+    try {
+      const { recalculatePaperworkHolds } = await import("@/server/accounting");
+      await recalculatePaperworkHolds(input.ownerId);
+    } catch {
+      // Non-fatal — document upload succeeded; holds can be refreshed manually
+    }
   }
   return {
     id: documentId,

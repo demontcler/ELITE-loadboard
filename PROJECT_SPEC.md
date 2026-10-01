@@ -289,7 +289,7 @@ STORAGE_LOCAL_PATH=./storage
 - Server-side filters: customer, date range, job status, dispatcher, carrier, driver, pickup/delivery location, jobs needing trucks, free-text; clear + combine filters; empty states
 - Job cards show trucks required / assigned / dispatched / delivered / needed from TruckAssignment data
 
-## Phase 1–4 status (post-remediation)
+## Phase 1–5 status
 
 | Phase | Verdict | Notes |
 |---|---|---|
@@ -297,8 +297,10 @@ STORAGE_LOCAL_PATH=./storage
 | 2 Master data | **COMPLETE** | Full CRUD/archive workflows for customers, carriers, drivers, equipment |
 | 3 Jobs core | **COMPLETE** | Multi-truck independence, equipment selection, bulk actions, revenue rule |
 | 4 Load board | **COMPLETE** | Columns + operational filters + accurate truck counts |
+| 5 Documents | **COMPLETE** | Per-truck BOL/POD independence, compliance center, secure storage, holds |
+| 6 Accounting | **COMPLETE** | AR/AP, paperwork holds, settlements, profitability, accessorials |
 
-Do **not** begin Phase 5 until explicitly approved. *(Superseded — Phase 5 implemented below.)*
+Do **not** begin Phase 8 until explicitly approved.
 
 ### PHASE 5 — Documents & Compliance ✅ COMPLETE
 - Per-entity documents (Job, TruckAssignment, Customer, Carrier, Driver, Tractor, Trailer)
@@ -311,12 +313,16 @@ Do **not** begin Phase 5 until explicitly approved. *(Superseded — Phase 5 imp
 - Mobile-friendly upload (file + camera capture)
 - Integration: `npm run test:phase5`
 
-### PHASE 6 — Accounting
-- Job & truck profitability
-- AR invoices
-- AP settlements
-- Accessorials
-- Paperwork-gated payment readiness
+### PHASE 6 — Accounting ✅ COMPLETE
+- Accounting Center: Overview, AR/Invoices, AP/Payables, Settlements, Ready to Invoice, Holds, Accessorials, AR Aging, Profitability
+- Decimal-safe money; Job + Truck profitability with revenue hierarchy (no double-count)
+- Accessorials (detention, fuel, TONU, etc.) with customer/carrier split
+- Invoice readiness from Phase 5 paperwork (NOT_READY with explicit hold reasons)
+- Customer payments (partial → PARTIALLY_PAID; balance recalculation)
+- CarrierPayable per TruckAssignment; PAPERWORK_HOLD until POD; sync on document upload
+- Settlements from multiple payables
+- Audit logs for invoice/payment/payable/settlement/accessorial actions
+- Integration: `npm run test:phase6`
 
 ### PHASE 7 — Dashboard, Search, Reports
 - Executive metrics with deep links (basic dashboard live; full reports later)
@@ -343,7 +349,7 @@ Do **not** begin Phase 5 until explicitly approved. *(Superseded — Phase 5 imp
 | `lib/calculations/compliance.ts` | Document valid / expires soon / expired / missing |
 | `lib/calculations/paperwork.ts` | Checklist completeness → payment/invoice hold |
 
-Integration harnesses: `npm run test:integration`, `npm run test:phase5`.
+Integration harnesses: `npm run test:integration`, `npm run test:phase5`, `npm run test:phase6`.
 
 ---
 

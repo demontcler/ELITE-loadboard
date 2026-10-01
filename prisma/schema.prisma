@@ -277,6 +277,7 @@ model Carrier {
   trailers    Trailer[]
   assignments TruckAssignment[]
   settlements CarrierSettlement[]
+  payables    CarrierPayable[]
 
   @@index([legalName])
   @@index([mcNumber])
@@ -752,6 +753,7 @@ model TruckAssignment {
   documents   TruckAssignmentDocument[]
   accessorials Accessorial[]
   settlements CarrierSettlement[]
+  payable     CarrierPayable?
 
   @@unique([jobId, assignmentNumber])
   @@index([jobId])
@@ -864,11 +866,24 @@ model TruckAssignmentDocument {
 
 enum InvoiceStatus {
   DRAFT
+  NOT_READY
   READY_TO_INVOICE
   SENT
   PARTIAL_PAYMENT
+  PARTIALLY_PAID
   PAID
   OVERDUE
+  DISPUTED
+  VOID
+}
+
+enum PayableStatus {
+  NOT_READY
+  PAPERWORK_HOLD
+  READY_FOR_APPROVAL
+  APPROVED
+  SCHEDULED
+  PAID
   DISPUTED
   VOID
 }
@@ -888,10 +903,14 @@ enum AccessorialType {
   LAYOVER
   TONU
   FUEL_SURCHARGE
+  DRIVER_ASSIST
+  TARP
+  OVER_DIMENSIONAL
   LUMPER
   EXTRA_STOP
   PERMIT
   ESCORT
+  ADDITIONAL_LABOR
   OTHER
 }
 
@@ -901,8 +920,12 @@ model Accessorial {
   type              AccessorialType
   description       String?
   amount            Decimal        @db.Decimal(14, 2)
+  customerAmount    Decimal?       @db.Decimal(14, 2)
+  carrierAmount     Decimal?       @db.Decimal(14, 2)
   billToCustomer    Boolean        @default(true)
   payToCarrier      Boolean        @default(false)
+  approvalStatus    String         @default("PENDING") // PENDING | APPROVED | REJECTED
+  notes             String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   deletedAt         DateTime?
@@ -910,29 +933,35 @@ model Accessorial {
   truckAssignment TruckAssignment @relation(fields: [truckAssignmentId], references: [id], onDelete: Cascade)
 
   @@index([truckAssignmentId])
+  @@index([type])
 }
 
 model Invoice {
-  id              String        @id @default(cuid())
-  invoiceNumber   String        @unique
-  customerId      String
-  jobId           String?
-  invoiceDate     DateTime      @default(now())
-  dueDate         DateTime?
-  invoiceAmount   Decimal       @db.Decimal(14, 2)
-  amountPaid      Decimal       @default(0) @db.Decimal(14, 2)
-  remainingBalance Decimal      @db.Decimal(14, 2)
-  status          InvoiceStatus @default(DRAFT)
-  notes           String?
-  sentAt          DateTime?
-  paidAt          DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
+  id               String        @id @default(cuid())
+  invoiceNumber    String        @unique
+  customerId       String
+  jobId            String?
+  invoiceDate      DateTime      @default(now())
+  dueDate          DateTime?
+  terms            String?
+  subtotal         Decimal       @default(0) @db.Decimal(14, 2)
+  accessorialTotal Decimal       @default(0) @db.Decimal(14, 2)
+  invoiceAmount    Decimal       @db.Decimal(14, 2)
+  amountPaid       Decimal       @default(0) @db.Decimal(14, 2)
+  remainingBalance Decimal       @db.Decimal(14, 2)
+  status           InvoiceStatus @default(DRAFT)
+  holdReason       String?
+  notes            String?
+  sentAt           DateTime?
+  paidAt           DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
 
   customer  Customer          @relation(fields: [customerId], references: [id])
   job       Job?              @relation(fields: [jobId], references: [id])
   lineItems InvoiceLineItem[]
+  payments  CustomerPayment[]
 
   @@index([customerId])
   @@index([jobId])
@@ -957,6 +986,60 @@ model InvoiceLineItem {
   @@index([invoiceId])
 }
 
+model CustomerPayment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  paymentDate     DateTime @default(now())
+  amount          Decimal  @db.Decimal(14, 2)
+  paymentMethod   String?
+  referenceNumber String?
+  notes           String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([paymentDate])
+}
+
+model CarrierPayable {
+  id                  String        @id @default(cuid())
+  payableNumber       String        @unique
+  carrierId           String
+  driverId            String?
+  jobId               String
+  truckAssignmentId   String        @unique
+  baseRate            Decimal       @default(0) @db.Decimal(14, 2)
+  accessorialPay      Decimal       @default(0) @db.Decimal(14, 2)
+  deductions          Decimal       @default(0) @db.Decimal(14, 2)
+  totalPayable        Decimal       @default(0) @db.Decimal(14, 2)
+  paperworkComplete   Boolean       @default(false)
+  paperworkHoldReason String?
+  status              PayableStatus @default(NOT_READY)
+  approvalStatus      String        @default("PENDING")
+  paymentDate         DateTime?
+  paymentMethod       String?
+  referenceNumber     String?
+  notes               String?
+  settlementId        String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+
+  carrier         Carrier              @relation(fields: [carrierId], references: [id])
+  truckAssignment TruckAssignment      @relation(fields: [truckAssignmentId], references: [id])
+  settlement      CarrierSettlement?   @relation(fields: [settlementId], references: [id])
+
+  @@index([carrierId])
+  @@index([jobId])
+  @@index([status])
+  @@index([payableNumber])
+  @@index([settlementId])
+}
+
 model CarrierSettlement {
   id                String           @id @default(cuid())
   settlementNumber  String           @unique
@@ -965,6 +1048,9 @@ model CarrierSettlement {
   jobId             String?
   truckAssignmentId String?
   amount            Decimal          @db.Decimal(14, 2)
+  basePay           Decimal          @default(0) @db.Decimal(14, 2)
+  accessorialPay    Decimal          @default(0) @db.Decimal(14, 2)
+  deductions        Decimal          @default(0) @db.Decimal(14, 2)
   documentsComplete Boolean          @default(false)
   paymentApproved   Boolean          @default(false)
   paymentDate       DateTime?
@@ -979,6 +1065,7 @@ model CarrierSettlement {
   carrier         Carrier              @relation(fields: [carrierId], references: [id])
   truckAssignment TruckAssignment?     @relation(fields: [truckAssignmentId], references: [id])
   lineItems       SettlementLineItem[]
+  payables        CarrierPayable[]
 
   @@index([carrierId])
   @@index([truckAssignmentId])
