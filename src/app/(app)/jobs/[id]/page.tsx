@@ -376,6 +376,7 @@ export default async function JobDetailPage({
                               <div className="flex flex-wrap gap-2">
                                 <AssignTruckForm
                                   title={`Assign ${truck.displayId}`}
+                                  truckAssignmentId={truck.id}
                                   carriers={carrierOptions}
                                   drivers={driverOptions}
                                   tractors={tractorOptions}

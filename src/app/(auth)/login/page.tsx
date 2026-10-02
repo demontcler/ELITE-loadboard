@@ -10,31 +10,36 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@elite-loadboard.local");
-  const [password, setPassword] = useState("admin123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError(null);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
 
-    setLoading(false);
+      if (result?.error) {
+        setError("Invalid email or password");
+        setLoading(false);
+        return;
+      }
 
-    if (result?.error) {
-      setError("Invalid email or password");
-      return;
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("Could not sign in. Please try again.");
+      setLoading(false);
     }
-
-    router.push("/");
-    router.refresh();
   }
 
   return (
@@ -50,38 +55,43 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                aria-invalid={!!error}
+                disabled={loading}
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                aria-invalid={!!error}
+                disabled={loading}
               />
             </div>
             {error ? (
-              <p className="text-sm text-red-600">{error}</p>
+              <p className="text-sm text-red-600" role="alert">
+                {error}
+              </p>
             ) : null}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
-            <p className="text-center text-[11px] text-slate-400">
-              Dev seed: admin@elite-loadboard.local / admin123!
-            </p>
           </form>
         </CardContent>
       </Card>

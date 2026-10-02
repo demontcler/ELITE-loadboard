@@ -244,6 +244,9 @@ export async function markInvoiceSent(invoiceId: string) {
   const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, deletedAt: null } });
   if (!invoice) throw new ActionError("Invoice not found");
   if (invoice.status === "NOT_READY") throw new ActionError("Invoice is on paperwork hold");
+  if (["PAID", "VOID"].includes(invoice.status)) {
+    throw new ActionError("Cannot change status of a paid or void invoice");
+  }
   const updated = await prisma.invoice.update({
     where: { id: invoiceId },
     data: { status: "SENT", sentAt: new Date() },
@@ -277,6 +280,11 @@ export async function recordCustomerPayment(raw: unknown) {
 
   const invoice = await prisma.invoice.findFirst({ where: { id: data.invoiceId, deletedAt: null } });
   if (!invoice) throw new ActionError("Invoice not found");
+  if (["VOID"].includes(invoice.status)) throw new ActionError("Cannot pay a void invoice");
+  if (invoice.status === "PAID") throw new ActionError("Invoice is already paid");
+  if (["DRAFT", "NOT_READY"].includes(invoice.status)) {
+    throw new ActionError("Invoice is not ready to accept payments");
+  }
 
   const newPaid = new Prisma.Decimal(invoice.amountPaid.toString()).plus(amount);
   const remaining = new Prisma.Decimal(invoice.invoiceAmount.toString()).minus(newPaid);
@@ -590,6 +598,8 @@ export async function markPayablePaid(
   const payable = await prisma.carrierPayable.findFirst({ where: { id: payableId, deletedAt: null } });
   if (!payable) throw new ActionError("Payable not found");
   if (payable.status === "PAPERWORK_HOLD") throw new ActionError("Cannot pay — paperwork hold");
+  if (payable.status === "PAID") throw new ActionError("Payable is already paid");
+  if (payable.status === "VOID") throw new ActionError("Cannot pay a void payable");
   const updated = await prisma.carrierPayable.update({
     where: { id: payableId },
     data: {

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { auth } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import type { Role } from "@prisma/client";
+import Link from "next/link";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -38,6 +39,16 @@ export default async function SettingsPage() {
       <PageHeader
         title="Settings"
         description="Company defaults, job numbering, and operational warning thresholds."
+        actions={
+          role && hasPermission(role, "users:manage") ? (
+            <Link
+              href="/settings/users"
+              className="h-8 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium leading-8 hover:bg-slate-50"
+            >
+              Manage users
+            </Link>
+          ) : null
+        }
       />
 
       <div className="grid gap-3 lg:grid-cols-3">

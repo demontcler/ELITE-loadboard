@@ -3,8 +3,35 @@ import { PrismaClient, Role } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+function assertSeedAllowed() {
+  const appEnv = (process.env.APP_ENV || process.env.NODE_ENV || "development").toLowerCase();
+  if (appEnv === "production") {
+    if (process.env.ALLOW_PRODUCTION_SEED !== "true") {
+      console.error(
+        "Refusing to run seed in production. Use scripts/bootstrap-admin.ts for the first admin, or set ALLOW_PRODUCTION_SEED=true only for an explicit controlled bootstrap."
+      );
+      process.exit(1);
+    }
+    console.warn("ALLOW_PRODUCTION_SEED=true — proceeding with extreme caution.");
+  }
+  if (appEnv === "staging" && process.env.ALLOW_STAGING_SEED !== "true") {
+    console.error(
+      "Refusing to run full demo seed in staging without ALLOW_STAGING_SEED=true."
+    );
+    process.exit(1);
+  }
+}
+
 async function main() {
-  const passwordHash = await hash("admin123!", 12);
+  assertSeedAllowed();
+
+  const demoPassword = process.env.SEED_ADMIN_PASSWORD || "admin123!";
+  if ((process.env.APP_ENV || "").toLowerCase() === "production" && !process.env.SEED_ADMIN_PASSWORD) {
+    console.error("Production seed requires SEED_ADMIN_PASSWORD to be set explicitly.");
+    process.exit(1);
+  }
+
+  const passwordHash = await hash(demoPassword, 12);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@elite-loadboard.local" },
@@ -486,7 +513,11 @@ async function main() {
   }
 
   console.log("Seed complete.");
-  console.log(`Admin user: ${admin.email} / admin123!`);
+  if ((process.env.APP_ENV || process.env.NODE_ENV || "development") !== "production") {
+    console.log(`Dev admin: ${admin.email} (password from SEED_ADMIN_PASSWORD or default — see README local setup)`);
+  } else {
+    console.log(`Production bootstrap user ensured: ${admin.email}`);
+  }
 }
 
 main()

@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  getAssignmentConflicts,
+  type AssignmentConflict,
+} from "@/server/assignment-conflicts";
 
 type Option = { value: string; label: string; carrierId?: string | null };
 
@@ -17,6 +21,7 @@ export function AssignTruckForm({
   drivers,
   tractors,
   trailers,
+  truckAssignmentId,
   onSubmit,
 }: {
   title: string;
@@ -26,12 +31,14 @@ export function AssignTruckForm({
   drivers: Option[];
   tractors: Option[];
   trailers: Option[];
+  truckAssignmentId?: string;
   onSubmit: (data: Record<string, string>) => Promise<unknown>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string>>(defaultValues);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<AssignmentConflict[]>([]);
   const [pending, startTransition] = useTransition();
 
   const carrierId = values.carrierId || "";
@@ -68,9 +75,25 @@ export function AssignTruckForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (pending) return;
     setError(null);
     startTransition(async () => {
       try {
+        const conflicts = await getAssignmentConflicts({
+          truckAssignmentId: truckAssignmentId || null,
+          tractorId: values.tractorId || null,
+          trailerId: values.trailerId || null,
+          driverId: values.driverId || null,
+        });
+        if (conflicts.length > 0) {
+          setWarnings(conflicts);
+          const ok = window.confirm(
+            `Assignment warning:\n\n${conflicts.map((c) => c.message).join("\n")}\n\nSave anyway? (override)`
+          );
+          if (!ok) return;
+        } else {
+          setWarnings([]);
+        }
         await onSubmit(values);
         setOpen(false);
         router.refresh();
@@ -90,6 +113,19 @@ export function AssignTruckForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {warnings.length > 0 ? (
+            <div
+              className="sm:col-span-2 lg:col-span-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+              role="status"
+            >
+              <strong>WARNING — possible conflicting assignment</strong>
+              <ul className="mt-1 list-disc pl-4">
+                {warnings.map((w, i) => (
+                  <li key={`${w.kind}-${i}`}>{w.message}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="space-y-1">
             <Label htmlFor="carrierId">Carrier</Label>
             <select

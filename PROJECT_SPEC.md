@@ -289,7 +289,7 @@ STORAGE_LOCAL_PATH=./storage
 - Server-side filters: customer, date range, job status, dispatcher, carrier, driver, pickup/delivery location, jobs needing trucks, free-text; clear + combine filters; empty states
 - Job cards show trucks required / assigned / dispatched / delivered / needed from TruckAssignment data
 
-## Phase 1–5 status
+## Phase 1–8 status
 
 | Phase | Verdict | Notes |
 |---|---|---|
@@ -300,8 +300,9 @@ STORAGE_LOCAL_PATH=./storage
 | 5 Documents | **COMPLETE** | Per-truck BOL/POD independence, compliance center, secure storage, holds |
 | 6 Accounting | **COMPLETE** | AR/AP, paperwork holds, settlements, profitability, accessorials |
 | 7 Dashboard / Reports / Search | **COMPLETE** | Live metrics, ops/financial reports, CSV export, expanded search |
+| 8 Production hardening | **COMPLETE** | Security, env isolation, storage adapter, docs, RBAC/users, regression tests |
 
-Do **not** begin Phase 8 until explicitly approved.
+Do **not** deploy staging/production until manual approval after the release checklist.
 
 ### PHASE 5 — Documents & Compliance ✅ COMPLETE
 - Per-entity documents (Job, TruckAssignment, Customer, Carrier, Driver, Tractor, Trailer)
@@ -336,12 +337,17 @@ Do **not** begin Phase 8 until explicitly approved.
 - Saved-filter preparation links (My Loads Today, Missing PODs, Invoices Ready, etc.)
 - Integration: `npm run test:phase7`
 
-### PHASE 8 — Polish
-- Lint / typecheck / tests
-- Security pass
-- Performance (indexes, pagination)
-- Seed demo dataset
-- README / runbook
+### PHASE 8 — Production Hardening ✅ COMPLETE
+- Environment isolation (`APP_ENV`), production env fail-safes, expanded `.env.example`
+- Auth hardening: session maxAge, secure cookies, login rate limit, deactivated-user session revocation
+- Seed blocked in production; `scripts/bootstrap-admin.ts` for first admin; Settings → Users management
+- Document security: upload MIME/extension/size checks, path traversal rejection, S3-compatible storage adapter
+- Financial immutability guards on paid/void invoices and payables
+- Equipment/driver assignment conflict warnings (override allowed)
+- Security headers, `/api/health`, structured logging + error-hook point
+- Docs: DEPLOYMENT, BACKUP_AND_RECOVERY, OPERATIONS_RUNBOOK, RELEASE_CHECKLIST, RBAC_MATRIX
+- Load-test generator (dev-only); Phase 8 regression/security suite `npm run test:phase8`
+- **Not deployed** — staging/production require manual approval
 
 ---
 
@@ -357,7 +363,7 @@ Do **not** begin Phase 8 until explicitly approved.
 | `lib/calculations/paperwork.ts` | Checklist completeness → payment/invoice hold |
 | `lib/dates/ranges.ts` | Company-timezone date presets for reports/dashboard |
 
-Integration harnesses: `npm run test:integration`, `npm run test:phase5`, `npm run test:phase6`, `npm run test:phase7`.
+Integration harnesses: `npm run test:all` (calc + phases 1–8 + audit).
 
 ---
 

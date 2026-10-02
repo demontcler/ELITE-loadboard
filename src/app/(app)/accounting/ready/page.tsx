@@ -13,7 +13,7 @@ export default async function ReadyToInvoicePage() {
       <h2 className="text-sm font-semibold text-slate-900">Jobs Ready to Invoice</h2>
       <p className="text-xs text-slate-500">
         Delivered/completed jobs without an active invoice. Paperwork readiness is evaluated from
-        Phase 5 BOL/POD requirements.
+        Phase BOL/POD requirements.
       </p>
       {jobs.length === 0 ? (
         <EmptyState message="No unbilled delivered jobs." />
