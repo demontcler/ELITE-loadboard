@@ -1,5 +1,6 @@
 /**
- * Product branding — replace files under /public/brand to rebrand without code changes.
+ * Product branding — official ELITE monogram marks.
+ * Replace PNG files under /public/brand to refresh artwork.
  * See docs/BRANDING.md
  */
 export const BRAND = {
@@ -8,18 +9,32 @@ export const BRAND = {
   tagline: "Oilfield · Pipe · Flatbed TMS",
   legalName: "ELITE Logistics",
   version: "1.0.0",
-  /** Public paths (replace these files to update logos) */
+  /**
+   * Official monogram:
+   * - dark = black mark for light backgrounds (login, invoices, light UI)
+   * - light = white mark for dark backgrounds (sidebar, dark headers)
+   */
   assets: {
-    mark: "/brand/logo-mark.svg",
-    fullLight: "/brand/logo-full-light.svg", // for dark backgrounds (sidebar)
-    fullDark: "/brand/logo-full-dark.svg", // for light backgrounds (login)
-    favicon: "/brand/favicon.svg",
+    markDark: "/brand/logo-mark-dark.png",
+    markLight: "/brand/logo-mark-light.png",
+    /** Convenience aliases */
+    mark: "/brand/logo-mark-dark.png",
+    markOnDark: "/brand/logo-mark-light.png",
+    favicon: "/brand/favicon.png",
+    favicon32: "/brand/favicon-32.png",
     appleTouch: "/brand/apple-touch-icon.png",
   },
   colors: {
-    primary: "#f59e0b", // amber-500
+    primary: "#f59e0b",
     primaryDark: "#d97706",
     ink: "#0f172a",
-    slate: "#1e293b",
+    slate: "#020617",
   },
 } as const;
+
+export type BrandSurface = "dark" | "light";
+
+/** Pick the correct monogram for the background surface. */
+export function brandMarkFor(surface: BrandSurface): string {
+  return surface === "dark" ? BRAND.assets.markLight : BRAND.assets.markDark;
+}

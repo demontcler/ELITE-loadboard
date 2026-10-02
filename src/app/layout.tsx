@@ -22,8 +22,12 @@ export const metadata: Metadata = {
   description: `${BRAND.tagline} — transportation management for oilfield, pipe, and flatbed logistics.`,
   applicationName: BRAND.productName,
   icons: {
-    icon: [{ url: BRAND.assets.favicon, type: "image/svg+xml" }],
+    icon: [
+      { url: BRAND.assets.favicon, type: "image/png", sizes: "64x64" },
+      { url: BRAND.assets.favicon32, type: "image/png", sizes: "32x32" },
+    ],
     shortcut: BRAND.assets.favicon,
+    apple: BRAND.assets.appleTouch,
   },
   appleWebApp: {
     title: BRAND.productName,

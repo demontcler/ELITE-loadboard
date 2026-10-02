@@ -37,8 +37,8 @@ export function AppSidebar() {
 
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-slate-800 bg-slate-950 text-slate-100">
-      <div className="border-b border-slate-800 px-3 py-3">
-        <BrandLogo variant="sidebar" href="/" showTagline />
+      <div className="border-b border-slate-800 px-3 py-3.5">
+        <BrandLogo variant="sidebar" href="/" showWordmark size="sm" />
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" aria-label="Main">
@@ -84,7 +84,7 @@ export function AppHeader({
     <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="md:hidden">
-          <BrandLogo variant="mark" href="/" />
+          <BrandLogo variant="mark" href="/" showWordmark={false} size="sm" />
         </div>
         <GlobalSearch />
       </div>

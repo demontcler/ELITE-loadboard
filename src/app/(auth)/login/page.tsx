@@ -45,11 +45,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4">
-      <div className="mb-6">
-        <BrandLogo variant="login" href={null} showTagline />
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-slate-950 px-4">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(245,158,11,0.12),_transparent_55%)]" />
+      <div className="relative mb-8 flex flex-col items-center gap-3">
+        <BrandLogo
+          variant="sidebar"
+          href={null}
+          showWordmark
+          showTagline
+          size="lg"
+        />
       </div>
-      <Card className="w-full max-w-md border-slate-200 shadow-sm">
+      <Card className="relative w-full max-w-md border-slate-700 bg-white shadow-xl">
         <CardHeader>
           <CardTitle className="text-lg">Sign in</CardTitle>
           <CardDescription>
@@ -97,7 +104,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-      <p className="mt-6 text-[11px] text-slate-400">
+      <p className="relative mt-8 text-[11px] text-slate-500">
         {BRAND.legalName} · v{BRAND.version}
       </p>
     </div>

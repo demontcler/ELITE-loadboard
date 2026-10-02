@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 56" fill="none" role="img" aria-label="ELITE Loadboard">
-  <rect x="0" y="4" width="48" height="48" rx="10" fill="#0f172a"/>
-  <path d="M10 40V16h22v5H16v3.5h13v4H16V32h16v5H10z" fill="#f59e0b"/>
-  <text x="60" y="28" fill="#f8fafc" font-family="system-ui,Segoe UI,sans-serif" font-size="18" font-weight="700" letter-spacing="0.12em">ELITE</text>
-  <text x="60" y="46" fill="#94a3b8" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="500">Loadboard TMS</text>
-</svg>
