@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { BrandLogo } from "@/components/layout/brand-logo";
+import { BRAND } from "@/lib/branding";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,15 +45,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-      <Card className="w-full max-w-md border-slate-200">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4">
+      <div className="mb-6">
+        <BrandLogo variant="login" href={null} showTagline />
+      </div>
+      <Card className="w-full max-w-md border-slate-200 shadow-sm">
         <CardHeader>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-600">
-            ELITE
-          </div>
-          <CardTitle className="text-xl">Loadboard TMS</CardTitle>
+          <CardTitle className="text-lg">Sign in</CardTitle>
           <CardDescription>
-            Oilfield · pipe · flatbed transportation management
+            Access {BRAND.productName} for dispatch, compliance, and accounting.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -95,6 +97,9 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
+      <p className="mt-6 text-[11px] text-slate-400">
+        {BRAND.legalName} · v{BRAND.version}
+      </p>
     </div>
   );
 }

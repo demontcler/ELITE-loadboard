@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { BRAND } from "@/lib/branding";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +15,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ELITE Loadboard TMS",
-  description: "Oilfield, pipe, and flatbed transportation management system",
+  title: {
+    default: `${BRAND.productName} TMS`,
+    template: `%s · ${BRAND.shortName}`,
+  },
+  description: `${BRAND.tagline} — transportation management for oilfield, pipe, and flatbed logistics.`,
+  applicationName: BRAND.productName,
+  icons: {
+    icon: [{ url: BRAND.assets.favicon, type: "image/svg+xml" }],
+    shortcut: BRAND.assets.favicon,
+  },
+  appleWebApp: {
+    title: BRAND.productName,
+  },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

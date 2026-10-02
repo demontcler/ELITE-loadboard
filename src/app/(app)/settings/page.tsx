@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import type { Role } from "@prisma/client";
 import Link from "next/link";
+import { BRAND } from "@/lib/branding";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -38,7 +39,7 @@ export default async function SettingsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Settings"
-        description="Company defaults, job numbering, and operational warning thresholds."
+        description={`${BRAND.productName} v${BRAND.version} — company defaults, numbering, and thresholds.`}
         actions={
           role && hasPermission(role, "users:manage") ? (
             <Link

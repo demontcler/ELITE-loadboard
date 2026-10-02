@@ -302,6 +302,8 @@ STORAGE_LOCAL_PATH=./storage
 | 7 Dashboard / Reports / Search | **COMPLETE** | Live metrics, ops/financial reports, CSV export, expanded search |
 | 8 Production hardening | **COMPLETE** | Security, env isolation, storage adapter, docs, RBAC/users, regression tests |
 
+**Product release: v1.0.0** — branding drop-in at `public/brand/` ([docs/BRANDING.md](./docs/BRANDING.md)).
+
 Do **not** deploy staging/production until manual approval after the release checklist.
 
 ### PHASE 5 — Documents & Compliance ✅ COMPLETE

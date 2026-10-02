@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalSearch } from "@/components/layout/global-search";
+import { BrandLogo } from "@/components/layout/brand-logo";
+import { BRAND } from "@/lib/branding";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -35,15 +37,11 @@ export function AppSidebar() {
 
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r border-slate-800 bg-slate-950 text-slate-100">
-      <div className="border-b border-slate-800 px-4 py-4">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-500">
-          ELITE
-        </div>
-        <div className="text-sm font-semibold leading-tight">Loadboard TMS</div>
-        <div className="mt-0.5 text-[11px] text-slate-400">Oilfield · Pipe · Flatbed</div>
+      <div className="border-b border-slate-800 px-3 py-3">
+        <BrandLogo variant="sidebar" href="/" showTagline />
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3" aria-label="Main">
         {NAV.map((item) => {
           const active =
             item.href === "/"
@@ -61,12 +59,16 @@ export function AppSidebar() {
                   : "text-slate-300 hover:bg-slate-900 hover:text-white"
               )}
             >
-              <Icon className="h-4 w-4 shrink-0 opacity-80" />
+              <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
               {item.label}
             </Link>
           );
         })}
       </nav>
+
+      <div className="border-t border-slate-800 px-3 py-2 text-[10px] text-slate-500">
+        {BRAND.productName} v{BRAND.version}
+      </div>
     </aside>
   );
 }
@@ -80,9 +82,14 @@ export function AppHeader({
 }) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
-      <GlobalSearch />
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="md:hidden">
+          <BrandLogo variant="mark" href="/" />
+        </div>
+        <GlobalSearch />
+      </div>
       <div className="flex items-center gap-3 text-sm">
-        <div className="text-right">
+        <div className="hidden text-right sm:block">
           <div className="font-medium text-slate-900">{userName}</div>
           <div className="text-[11px] uppercase tracking-wide text-slate-500">
             {role.replaceAll("_", " ")}
